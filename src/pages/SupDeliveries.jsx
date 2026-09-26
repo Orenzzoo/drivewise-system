@@ -174,13 +174,13 @@ function StatusBadge({ status, dropoffDate, className = "" }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1.5">
       <span
-        className={`inline-flex max-w-full rounded-full px-2.5 py-1 text-center font-semibold leading-tight ${statusBadge[status]} ${className}`}
+        className={`inline-flex max-w-full shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-center font-semibold leading-tight ${statusBadge[status]} ${className}`}
       >
         {statusLabel[status] ?? status.replaceAll("_", " ")}
       </span>
       {isLate && (
         <span
-          className={`inline-flex shrink-0 rounded-full bg-red-100 px-2.5 py-1 text-center font-semibold leading-tight text-red-700 ${className}`}
+          className={`inline-flex shrink-0 whitespace-nowrap rounded-full bg-red-100 px-2.5 py-1 text-center font-semibold leading-tight text-red-700 ${className}`}
         >
           Late
         </span>
@@ -8957,7 +8957,7 @@ function SupDeliveries() {
           {activeModule === "inbox" && (
             <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <div className="shrink-0 hidden grid-cols-[0.85fr_0.7fr_1.1fr_2fr_0.55fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 lg:grid">
+                <div className="shrink-0 hidden grid-cols-[0.55fr_0.7fr_1.3fr_2fr_0.55fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 lg:grid">
                   <span className="text-center">Status</span>
                   <span className="text-center">Request ID</span>
                   <span className="text-left">Customer</span>
@@ -8979,7 +8979,7 @@ function SupDeliveries() {
                     <article
                       key={row.id}
                       onClick={() => openDetails(row)}
-                      className="grid cursor-pointer gap-4 px-5 py-4 transition hover:bg-slate-50 [&>*]:min-w-0 lg:grid-cols-[0.85fr_0.7fr_1.1fr_2fr_0.55fr_0.3fr] lg:items-center"
+                      className="grid cursor-pointer gap-4 px-5 py-4 transition hover:bg-slate-50 [&>*]:min-w-0 lg:grid-cols-[0.55fr_0.7fr_1.3fr_2fr_0.55fr_0.3fr] lg:items-center"
                     >
                       <div className="flex justify-center">
                         <StatusBadge
@@ -9030,7 +9030,7 @@ function SupDeliveries() {
           {activeModule === "assignment" && (
             <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <div className="shrink-0 hidden grid-cols-[0.85fr_0.7fr_1.1fr_1.5fr_0.6fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 lg:grid">
+                <div className="shrink-0 hidden grid-cols-[0.55fr_0.7fr_1.3fr_1.5fr_0.6fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 [&>*]:whitespace-nowrap lg:grid">
                   <span className="text-center">Status</span>
                   <span className="text-center">Request ID</span>
                   <span className="text-left">Customer</span>
@@ -9056,7 +9056,7 @@ function SupDeliveries() {
                     <article
                       key={row.id}
                       onClick={() => openDetails(row)}
-                      className="grid cursor-pointer gap-4 px-5 py-4 transition hover:bg-slate-50 [&>*]:min-w-0 lg:grid-cols-[0.85fr_0.7fr_1.1fr_1.5fr_0.6fr_0.3fr] lg:items-center"
+                      className="grid cursor-pointer gap-4 px-5 py-4 transition hover:bg-slate-50 [&>*]:min-w-0 lg:grid-cols-[0.55fr_0.7fr_1.3fr_1.5fr_0.6fr_0.3fr] lg:items-center"
                     >
                       <div className="flex justify-center">
                         <StatusBadge
@@ -9514,7 +9514,7 @@ function SupDeliveries() {
               ) : (
                 <>
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div className="shrink-0 hidden grid-cols-[0.85fr_0.7fr_1.1fr_1.4fr_0.8fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 lg:grid">
+                    <div className="shrink-0 hidden grid-cols-[0.55fr_0.7fr_1.3fr_1.4fr_0.8fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 lg:grid">
                       <span className="text-center">Status</span>
                       <span className="text-center">Request ID</span>
                       <span className="text-left">Customer</span>
@@ -9540,7 +9540,7 @@ function SupDeliveries() {
                         <article
                           key={delivery.id}
                           onClick={() => setSelectedReportId(delivery.id)}
-                          className="grid cursor-pointer gap-4 px-5 py-4 transition [&>*]:min-w-0 lg:grid-cols-[0.85fr_0.7fr_1.1fr_1.4fr_0.8fr_0.3fr] lg:items-center hover:bg-slate-50"
+                          className="grid cursor-pointer gap-4 px-5 py-4 transition [&>*]:min-w-0 lg:grid-cols-[0.55fr_0.7fr_1.3fr_1.4fr_0.8fr_0.3fr] lg:items-center hover:bg-slate-50"
                         >
                           <div className="flex justify-center">
                             <span className="inline-flex max-w-full rounded-full bg-emerald-100 px-2.5 py-1 text-center text-[10px] font-semibold leading-tight text-emerald-700 xl:text-[11px]">
@@ -9610,7 +9610,7 @@ function SupDeliveries() {
               ) : (
                 <>
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div className="shrink-0 hidden grid-cols-[0.85fr_0.7fr_1.1fr_1.4fr_0.9fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 lg:grid">
+                    <div className="shrink-0 hidden grid-cols-[0.55fr_0.7fr_1.3fr_1.4fr_0.9fr_0.3fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 [&>*]:min-w-0 lg:grid">
                       <span className="text-center">Status</span>
                       <span className="text-center">Request ID</span>
                       <span className="text-left">Customer</span>
@@ -9638,7 +9638,7 @@ function SupDeliveries() {
                           onClick={() =>
                             setSelectedReportId(`cancel-${delivery.id}`)
                           }
-                          className="grid cursor-pointer gap-4 px-5 py-4 transition [&>*]:min-w-0 lg:grid-cols-[0.85fr_0.7fr_1.1fr_1.4fr_0.9fr_0.3fr] lg:items-center hover:bg-slate-50"
+                          className="grid cursor-pointer gap-4 px-5 py-4 transition [&>*]:min-w-0 lg:grid-cols-[0.55fr_0.7fr_1.3fr_1.4fr_0.9fr_0.3fr] lg:items-center hover:bg-slate-50"
                         >
                           <div className="flex justify-center">
                             <span className="inline-flex max-w-full rounded-full bg-rose-100 px-2.5 py-1 text-center text-[10px] font-semibold leading-tight text-rose-700 xl:text-[11px]">
