@@ -2019,6 +2019,17 @@ function CustomerRequestDelivery() {
 
               {formData.stops.length > 0 && (
                 <div className="space-y-4">
+                  {/* Only shown once the customer has actually added at
+                      least one extra drop-off — the note is about having
+                      multiple drop-offs, so it has no business appearing
+                      before that choice is made. Same styling as the
+                      budget-estimate note below. */}
+                  <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                    <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-700 leading-relaxed">
+                      Multiple drop-offs should only be within the area.
+                    </p>
+                  </div>
                   <p className="text-xs text-slate-500">
                     These are additional drop-off destinations, not necessarily
                     visited in this order — the driver is routed to whichever is

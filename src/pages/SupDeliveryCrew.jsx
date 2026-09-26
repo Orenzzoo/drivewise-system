@@ -75,6 +75,9 @@ function mapCrewRow(row) {
     workingDays: row.working_days || [],
     contactNumber: row.contact_number || "",
     employeeId: row.record_id || "",
+    // `users.deactivated_at` (list-crew returns it on every row) — a
+    // deactivated account is never available, regardless of working days.
+    deactivatedAt: row.deactivated_at || null,
     birthday: birthDate
       ? birthDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })
       : null,
@@ -103,6 +106,19 @@ function StatusBadge({ status }) {
       {meta.label}
     </span>
   );
+}
+
+// The Status column, the Status filter and the search box all need the status
+// of the view that's actually on screen: today's everywhere except inside the
+// "Available This Week" tab, which is a whole-week statement (weekStatus on
+// rosterWithView). Without this, week-listed members with no working days
+// rendered a contradictory "Unavailable" badge (reported 2026-09-27).
+function statusKeyForView(crew, viewMode) {
+  return viewMode === "week" ? crew.weekStatus : crew.status;
+}
+
+function statusLabelForView(crew, viewMode) {
+  return viewMode === "week" ? crew.weekStatusLabel : crew.statusLabel;
 }
 
 function PositionTag({ position }) {
@@ -495,42 +511,22 @@ function SupDeliveryCrew() {
   // mapCrewRow's default null since they have no session data).
   const rosterWithStatus = useMemo(
     () =>
-      roster.map((member) => ({
-        ...member,
-        status: getCrewAvailability(member, busyRecordIds, todayDateKey()).key,
-        statusLabel: getCrewAvailability(member, busyRecordIds, todayDateKey()).label,
-        weeklyPerformance:
-          weeklyPerformanceByDriverId[member.recordId] ?? null,
-      })),
+      roster.map((member) => {
+        // A deactivated account (users.deactivated_at, 24h grace) is never
+        // available — getCrewAvailability only knows working days + trips.
+        const availability = member.deactivatedAt
+          ? CREW_STATUS_META.unavailable
+          : getCrewAvailability(member, busyRecordIds, todayDateKey());
+        return {
+          ...member,
+          status: availability.key,
+          statusLabel: availability.label,
+          weeklyPerformance:
+            weeklyPerformanceByDriverId[member.recordId] ?? null,
+        };
+      }),
     [roster, busyRecordIds, weeklyPerformanceByDriverId],
   );
-
-  const statusCounts = useMemo(
-    () => ({
-      All: rosterWithStatus.length,
-      Available: rosterWithStatus.filter((crew) => crew.status === "available").length,
-      Assigned: rosterWithStatus.filter((crew) => crew.status === "assigned").length,
-      Unavailable: rosterWithStatus.filter((crew) => crew.status === "unavailable").length,
-    }),
-    [rosterWithStatus],
-  );
-
-  const positionCounts = useMemo(
-    () => ({
-      All: rosterWithStatus.length,
-      Driver: rosterWithStatus.filter((crew) => crew.position === "Driver").length,
-      Helper: rosterWithStatus.filter((crew) => crew.position === "Helper").length,
-    }),
-    [rosterWithStatus],
-  );
-
-  const clientCounts = useMemo(() => {
-    const counts = { All: rosterWithStatus.length };
-    clientOptions.forEach((client) => {
-      counts[client] = rosterWithStatus.filter((crew) => crew.clientSpecialties.includes(client)).length;
-    });
-    return counts;
-  }, [rosterWithStatus, clientOptions]);
 
   // Current week window (Mon–Sun, Manila) for the "Available This Week"
   // shortcut. A member is free this week when none of their active trips
@@ -554,50 +550,126 @@ function SupDeliveryCrew() {
 
   // Extends rosterWithStatus with free-this-week and a helper's assigned driver
   // (active trip first, then saved Delivery Crew profile).
-  const rosterWithView = useMemo(
+  //
+  // "Available This Week" means: not deactivated, has at least one weekly
+  // working day, and that day is not covered by an active trip (day-level,
+  // explicit user decision 2026-09-27 — a member booked only on Saturday is
+  // still schedulable Mon–Fri). Before 2026-09-27 only a whole-week "no trip
+  // overlaps the window" check existed and working days were ignored, so crew
+  // with no crew_availability rows — who are never available — were listed as
+  // free all week and rendered with a contradictory "Unavailable" badge (the
+  // Sep 21–27, 2026 report). weekStatus/weekStatusLabel are the week-scoped
+  // status the week tab shows and filters by.
+  const rosterWithView = useMemo(() => {
+    // The week's 7 dates (key + JS weekday), computed once for every member.
+    const weekDays = [];
+    {
+      const [y, m, d] = weekStartKey.split("-").map(Number);
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(y, m - 1, d + i);
+        weekDays.push({ key: formatDateKey(date), dow: date.getDay() });
+      }
+    }
+
+    return rosterWithStatus.map((member) => {
+      const trips = busyRecordIds[member.recordId] || [];
+      const workingDays = member.workingDays || [];
+      const bookedThisWeek = trips.some(
+        (t) => t.start <= weekEndKey && weekStartKey <= t.end,
+      );
+      const freeThisWeek =
+        !member.deactivatedAt &&
+        workingDays.length > 0 &&
+        weekDays.some(
+          (day) =>
+            workingDays.includes(day.dow) &&
+            !trips.some((t) => t.start <= day.key && day.key <= t.end),
+        );
+      const weekStatus = freeThisWeek
+        ? "available"
+        : bookedThisWeek
+          ? "assigned"
+          : "unavailable";
+      let assignedDriver = null;
+      if (member.position === "Helper") {
+        assignedDriver =
+          helperDriverByRecordId.get(member.recordId) || helperDefaultDriverByRecordId.get(member.recordId) || null;
+      }
+      return {
+        ...member,
+        freeThisWeek,
+        weekStatus,
+        weekStatusLabel: CREW_STATUS_META[weekStatus].label,
+        assignedDriver,
+      };
+    });
+  }, [rosterWithStatus, busyRecordIds, helperDriverByRecordId, helperDefaultDriverByRecordId, weekStartKey, weekEndKey]);
+
+  // Members the active tab shows (before search/filters) — every filter
+  // dropdown's counts are computed from this so the numbers always describe
+  // the list on screen, not the whole roster.
+  const viewBase = useMemo(
     () =>
-      rosterWithStatus.map((member) => {
-        const trips = busyRecordIds[member.recordId] || [];
-        const freeThisWeek = !trips.some((t) => t.start <= weekEndKey && weekStartKey <= t.end);
-        let assignedDriver = null;
-        if (member.position === "Helper") {
-          assignedDriver =
-            helperDriverByRecordId.get(member.recordId) || helperDefaultDriverByRecordId.get(member.recordId) || null;
-        }
-        return { ...member, freeThisWeek, assignedDriver };
-      }),
-    [rosterWithStatus, busyRecordIds, helperDriverByRecordId, helperDefaultDriverByRecordId, weekStartKey, weekEndKey],
-  );
-
-  const filteredCrew = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-
-    return rosterWithView.filter((crew) => {
-      const matchesSearch = !query
-        ? true
-        : [crew.fullName, crew.position, crew.statusLabel, ...crew.clientSpecialties, crew.employeeId]
-            .join(" ")
-            .toLowerCase()
-            .includes(query);
-
-      const matchesStatus =
-        selectedStatus === "All" ||
-        crew.status === selectedStatus.toLowerCase();
-      const matchesPosition = selectedPosition === "All" || crew.position === selectedPosition;
-      const matchesClient =
-        selectedClient === "All" || crew.clientSpecialties.includes(selectedClient);
-      const matchesView =
+      rosterWithView.filter((crew) =>
         viewMode === "all"
           ? true
           : viewMode === "week"
             ? crew.freeThisWeek
             : viewMode === "helper-driver"
               ? crew.position === "Helper"
-              : true;
+              : true,
+      ),
+    [rosterWithView, viewMode],
+  );
 
-      return matchesSearch && matchesStatus && matchesPosition && matchesClient && matchesView;
+  const statusCounts = useMemo(
+    () => ({
+      All: viewBase.length,
+      Available: viewBase.filter((crew) => statusKeyForView(crew, viewMode) === "available").length,
+      Assigned: viewBase.filter((crew) => statusKeyForView(crew, viewMode) === "assigned").length,
+      Unavailable: viewBase.filter((crew) => statusKeyForView(crew, viewMode) === "unavailable").length,
+    }),
+    [viewBase, viewMode],
+  );
+
+  const positionCounts = useMemo(
+    () => ({
+      All: viewBase.length,
+      Driver: viewBase.filter((crew) => crew.position === "Driver").length,
+      Helper: viewBase.filter((crew) => crew.position === "Helper").length,
+    }),
+    [viewBase],
+  );
+
+  const clientCounts = useMemo(() => {
+    const counts = { All: viewBase.length };
+    clientOptions.forEach((client) => {
+      counts[client] = viewBase.filter((crew) => crew.clientSpecialties.includes(client)).length;
+    });
+    return counts;
+  }, [viewBase, clientOptions]);
+
+  const filteredCrew = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    return viewBase.filter((crew) => {
+      const matchesSearch = !query
+        ? true
+        : [crew.fullName, crew.position, statusLabelForView(crew, viewMode), ...crew.clientSpecialties, crew.employeeId]
+            .join(" ")
+            .toLowerCase()
+            .includes(query);
+
+      const matchesStatus =
+        selectedStatus === "All" ||
+        statusKeyForView(crew, viewMode) === selectedStatus.toLowerCase();
+      const matchesPosition = selectedPosition === "All" || crew.position === selectedPosition;
+      const matchesClient =
+        selectedClient === "All" || crew.clientSpecialties.includes(selectedClient);
+
+      return matchesSearch && matchesStatus && matchesPosition && matchesClient;
     }).sort((leftCrew, rightCrew) => leftCrew.fullName.localeCompare(rightCrew.fullName));
-  }, [rosterWithView, searchTerm, selectedStatus, selectedPosition, selectedClient, viewMode]);
+  }, [viewBase, searchTerm, selectedStatus, selectedPosition, selectedClient, viewMode]);
 
   // Quick-view tiles — crew availability at a glance without opening a single
   // profile. "This week" coverage is the Working Days column.
@@ -832,7 +904,7 @@ function SupDeliveryCrew() {
                           {crew.assignedDriver ? crew.assignedDriver.contactNumber : ""}
                         </td>
                         <td className="px-5 py-2.5">
-                          <StatusBadge status={crew.status} />
+                          <StatusBadge status={statusKeyForView(crew, viewMode)} />
                         </td>
                         <td className="py-2.5 pl-2 pr-5 text-right">
                           <ChevronRight className="ml-auto h-4 w-4 text-slate-400" />
@@ -913,7 +985,7 @@ function SupDeliveryCrew() {
                         </td>
                         <td className="px-5 py-2.5 text-slate-700">{crew.contactNumber}</td>
                         <td className="px-5 py-2.5">
-                          <StatusBadge status={crew.status} />
+                          <StatusBadge status={statusKeyForView(crew, viewMode)} />
                         </td>
                         <td className="py-2.5 pl-2 pr-5 text-right">
                           <ChevronRight className="ml-auto h-4 w-4 text-slate-400" />
