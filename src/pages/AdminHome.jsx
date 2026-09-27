@@ -1006,7 +1006,7 @@ function AdminHome() {
       !province ||
       (role === 'Customer' && !clientName)
     ) {
-      setFormError('Please fill in all required fields (Middle Name is optional).')
+      setFormError('Please fill in all required fields.')
       return
     }
 
