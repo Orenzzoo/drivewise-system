@@ -76,7 +76,7 @@ import {
   MANILA_TIMEZONE,
 } from "../lib/manilaTime.js";
 import { COMPLETED_REPORT_DATA, buildRealDriverTripReport } from "../lib/driverReportData.js";
-import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
+import { normalizeTruckTypeName, normalizeItemTypeName } from "../lib/deliveryOptions.js";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -3716,7 +3716,7 @@ function DeliveryDetailView({
               <div>
                 <p className="text-[10px] text-slate-500">Product Type</p>
                 <p className="font-medium text-slate-900">
-                  {delivery.itemType}
+                  {normalizeItemTypeName(delivery.itemType)}
                 </p>
               </div>
               <div>
@@ -5738,7 +5738,7 @@ function DriverDeliveries() {
                               Product Type
                             </p>
                             <p className="font-medium text-slate-900">
-                              {workspaceDelivery.itemType}
+                              {normalizeItemTypeName(workspaceDelivery.itemType)}
                             </p>
                           </div>
                           <div>

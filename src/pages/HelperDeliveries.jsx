@@ -51,7 +51,7 @@ import {
   MANILA_TIMEZONE,
 } from "../lib/manilaTime.js";
 import { GOOGLE_MAPS_LOADER_OPTIONS } from "../lib/googleMapsLoaderOptions.js";
-import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
+import { normalizeTruckTypeName, normalizeItemTypeName } from "../lib/deliveryOptions.js";
 
 // Same alert taxonomy DriverDeliveries.jsx uses (06_DROWSINESS_ALERT_PIPELINE.md)
 // — kept in sync manually since the two pages don't share a module today.
@@ -1011,7 +1011,7 @@ function DeliveryDetailView({
               <div>
                 <p className="text-[10px] text-slate-500">Product Type</p>
                 <p className="font-medium text-slate-900">
-                  {delivery.itemType}
+                  {normalizeItemTypeName(delivery.itemType)}
                 </p>
               </div>
               <div>
@@ -2254,7 +2254,7 @@ function HelperDeliveries() {
                               Product Type
                             </p>
                             <p className="font-medium text-slate-900">
-                              {workspaceDelivery.itemType}
+                              {normalizeItemTypeName(workspaceDelivery.itemType)}
                             </p>
                           </div>
                           <div>

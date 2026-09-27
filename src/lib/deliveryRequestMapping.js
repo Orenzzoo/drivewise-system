@@ -1,4 +1,5 @@
 import { formatManilaDateTime } from "./manilaTime.js";
+import { normalizeItemTypeName } from "./deliveryOptions.js";
 
 // Shared delivery_requests -> UI request-shape mapping, factored out of
 // SupDeliveries.jsx so both portals render identical delivery details:
@@ -77,7 +78,7 @@ export function mapDbRequest(row, clientName, fleet) {
     customerName: name,
     companyName: name,
     itemType: row.item_type
-      ? row.item_type.charAt(0).toUpperCase() + row.item_type.slice(1)
+      ? normalizeItemTypeName(row.item_type)
       : row.item_type,
     otherItemType: row.other_item_type,
     truckType: row.truck_type,

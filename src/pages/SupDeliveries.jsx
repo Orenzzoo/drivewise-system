@@ -309,8 +309,9 @@ function getTruckCapacity(r) {
 // meat_seafood and frozen_dairy are the ones only reefer (REF) trucks can
 // carry per ITEM_TRUCK_COMPATIBILITY (legacy pre-trim codes fresh_food,
 // frozen, dairy, pharmaceuticals kept matching for older rows), plus
-// mapDbRequest capitalizes the code. Human-readable mock labels (e.g.
-// "Frozen Goods") are also accepted. Anything else is Ordinary.
+// mapDbRequest normalizes the code to its label. Human-readable mock
+// labels (e.g. "Frozen Goods") are also accepted. Anything else is
+// Ordinary.
 function getCommodityType(itemType) {
   const t = String(itemType || "")
     .replace(/[\s_]+/g, "")
@@ -2827,7 +2828,10 @@ function DeliveryRequestDetails({ request, realDistanceKm, suggestedRoute }) {
             Vehicle Type
           </h4>
           <div className="space-y-1.5">
-            <Row label="Truck Type" value={getRequestedTruckType(request)} />
+            <Row
+              label="Truck Type"
+              value={normalizeTruckTypeName(getRequestedTruckType(request))}
+            />
             {request.crew?.truck &&
               normalizeTruckType(request.crew.truck.truckType) !==
                 normalizeTruckType(getRequestedTruckType(request)) && (
@@ -6409,7 +6413,9 @@ function SupDeliveries() {
                           <div className="space-y-1.5">
                             <Row
                               label="Truck Type"
-                              value={getRequestedTruckType(selectedRequest)}
+                              value={normalizeTruckTypeName(
+                                getRequestedTruckType(selectedRequest),
+                              )}
                             />
                             {selectedRequest.crew?.truck &&
                               normalizeTruckType(
@@ -6470,7 +6476,9 @@ function SupDeliveries() {
                           <div className="space-y-1.5">
                             <Row
                               label="Item Type"
-                              value={selectedRequest.itemType}
+                              value={normalizeItemTypeName(
+                                selectedRequest.itemType,
+                              )}
                             />
                             <Row
                               label="Est. Total Weight"
@@ -6711,7 +6719,9 @@ function SupDeliveries() {
                               Truck Type
                             </p>
                             <p className="text-sm font-semibold text-slate-800">
-                              {getRequestedTruckType(selectedRequest)}
+                              {normalizeTruckTypeName(
+                                getRequestedTruckType(selectedRequest),
+                              )}
                             </p>
                           </div>
                           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
@@ -8872,7 +8882,7 @@ function SupDeliveries() {
                         <ResolvedText value={row.pickupAddress} />
                       </p>
                       <p className="text-sm font-medium text-slate-800 text-center">
-                        {row.itemType}
+                        {normalizeItemTypeName(row.itemType)}
                       </p>
                       <div className="flex justify-center">
                         <ChevronRight className="h-4 w-4 text-slate-400" />
