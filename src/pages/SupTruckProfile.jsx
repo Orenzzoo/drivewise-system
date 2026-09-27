@@ -1,3 +1,4 @@
+import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import SupLayout from "../layout/SupLayout.jsx";
@@ -1108,7 +1109,7 @@ function SupTruckProfile() {
             <div>
               <InfoRow label="Plate Number" value={truck.plate_number} />
               <InfoRow label="Model" value={truck.model} />
-              <InfoRow label="Truck Type" value={truck.truck_type} />
+               <InfoRow label="Truck Type" value={normalizeTruckTypeName(truck.truck_type)} />
               <InfoRow
                 label="Commodity Type"
                 value={

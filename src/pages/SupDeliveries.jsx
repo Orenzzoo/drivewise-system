@@ -84,6 +84,7 @@ import {
   delivery_supervisor_data,
   completed_delivery_reports,
 } from "../lib/mockDeliveriesData.js";
+import { normalizeTruckTypeName, normalizeItemTypeName } from "../lib/deliveryOptions.js";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -2833,14 +2834,14 @@ function DeliveryRequestDetails({ request, realDistanceKm, suggestedRoute }) {
             {request.crew?.truck &&
               normalizeTruckType(request.crew.truck.truckType) !==
                 normalizeTruckType(getRequestedTruckType(request)) && (
-                <Row
-                  label="Assigned Truck Type"
-                  value={
-                    <span className="text-amber-600">
-                      {request.crew.truck.truckType} (mismatch)
-                    </span>
-                  }
-                />
+                  <Row
+                   label="Assigned Truck Type"
+                   value={
+                     <span className="text-amber-600">
+                       {normalizeTruckTypeName(request.crew.truck.truckType)} (mismatch)
+                     </span>
+                   }
+                 />
               )}
             <Row label="Capacity" value={getTruckCapacity(request)} />
             <Row
@@ -2871,7 +2872,7 @@ function DeliveryRequestDetails({ request, realDistanceKm, suggestedRoute }) {
             Deliverable Items
           </h4>
           <div className="space-y-1.5">
-            <Row label="Item Type" value={request.itemType} />
+             <Row label="Item Type" value={normalizeItemTypeName(request.itemType)} />
             <Row label="Est. Total Weight" value={getTotalWeight(request)} />
           </div>
         </div>
@@ -3400,7 +3401,7 @@ function TripDetailsTab({ delivery, report }) {
                 </p>
                 <p className="flex items-center gap-2 text-xs text-slate-500">
                   <Truck className="h-3.5 w-3.5" />
-                  {crew.truck?.plateNumber} • {crew.truck?.truckType}
+                   {crew.truck?.plateNumber} • {normalizeTruckTypeName(crew.truck?.truckType)}
                 </p>
               </div>
               {crew.driver.rating && (
@@ -6564,10 +6565,10 @@ function SupDeliveries() {
                                 <Row
                                   label="Assigned Truck Type"
                                   value={
-                                    <span className="text-amber-600">
-                                      {selectedRequest.crew.truck.truckType}{" "}
-                                      (mismatch)
-                                    </span>
+                                   <span className="text-amber-600">
+                                       {normalizeTruckTypeName(selectedRequest.crew.truck.truckType)}{" "}
+                                       (mismatch)
+                                     </span>
                                   }
                                 />
                               )}
@@ -7806,15 +7807,15 @@ function SupDeliveries() {
                         <div className="mt-4 space-y-3">
                           {selectedRequest.crew?.truck && (
                             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                              <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-center text-[10px] font-bold leading-tight text-slate-600">
-                                {selectedRequest.crew.truck.truckType}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-semibold text-slate-900">
-                                  {selectedRequest.crew.truck.plateNumber}
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  {selectedRequest.crew.truck.truckType} •{" "}
+                               <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-center text-[10px] font-bold leading-tight text-slate-600">
+                                 {normalizeTruckTypeName(selectedRequest.crew.truck.truckType)}
+                               </span>
+                               <div className="min-w-0 flex-1">
+                                 <p className="truncate text-sm font-semibold text-slate-900">
+                                   {selectedRequest.crew.truck.plateNumber}
+                                 </p>
+                                 <p className="text-xs text-slate-500">
+                                   {normalizeTruckTypeName(selectedRequest.crew.truck.truckType)} •{" "}
                                   {selectedRequest.crew.truck.capacity}
                                 </p>
                               </div>
@@ -7872,7 +7873,7 @@ function SupDeliveries() {
                                   Specialized crew required
                                 </p>
                                 <p className="mt-0.5">
-                                  Only {selectedRequest.truckType} trucks with
+                                   Only {normalizeTruckTypeName(selectedRequest.truckType)} trucks with
                                   drivers and helpers specialized for{" "}
                                   {selectedRequest.customerName} are shown.{" "}
                                   General-use trucks without the required
@@ -7904,8 +7905,8 @@ function SupDeliveries() {
                                   </div>
                                 ) : selectedTruck ? (
                                   <div className="flex flex-1 items-center gap-3 min-w-0">
-                                    <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-center text-[10px] font-bold leading-tight text-indigo-700">
-                                      {selectedTruck.truckType}
+                                     <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-center text-[10px] font-bold leading-tight text-indigo-700">
+                                       {normalizeTruckTypeName(selectedTruck.truckType)}
                                     </span>
                                     <div className="min-w-0 flex-1">
                                       <p className="flex flex-wrap items-center gap-1.5 truncate text-sm font-semibold text-slate-900">
@@ -7923,8 +7924,8 @@ function SupDeliveries() {
                                           </span>
                                         )}
                                       </p>
-                                      <p className="text-xs text-slate-500">
-                                        {selectedTruck.truckType} •{" "}
+                                       <p className="text-xs text-slate-500">
+                                         {normalizeTruckTypeName(selectedTruck.truckType)} •{" "}
                                         {selectedTruck.capacity}
                                       </p>
                                     </div>
@@ -7973,8 +7974,8 @@ function SupDeliveries() {
                                             : ""
                                         }`}
                                       >
-                                        <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
-                                          {truck.truckType}
+                                         <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
+                                           {normalizeTruckTypeName(truck.truckType)}
                                         </span>
                                         <div className="min-w-0 flex-1">
                                           <p className="flex flex-wrap items-center gap-1.5 truncate text-sm font-semibold text-slate-900">
@@ -7993,8 +7994,8 @@ function SupDeliveries() {
                                               </span>
                                             )}
                                           </p>
-                                          <p className="text-xs text-slate-500">
-                                            {truck.truckType} • {truck.capacity}
+                                           <p className="text-xs text-slate-500">
+                                             {normalizeTruckTypeName(truck.truckType)} • {truck.capacity}
                                           </p>
                                           {currentDriver && !driverWarning && (
                                             <p className="mt-0.5 text-[10px] text-slate-400">

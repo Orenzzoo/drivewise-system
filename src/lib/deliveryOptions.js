@@ -93,6 +93,28 @@ const LEGACY_ITEM_TYPE_LABELS = {
   construction: "Construction Materials",
 };
 
+// Convert underscored values like "1T_DRY", "pantry_staples" to
+// proper display names like "1T Dry", "Pantry Staples".
+// Uses the existing label fields as the source of truth; falls
+// back to converting underscores to spaces and capitalizing.
+export function normalizeTruckTypeName(value) {
+  if (!value) return "";
+  const match = truckTypes.find((t) => t.value === value);
+  if (match) return match.label;
+  return String(value)
+    .replace(/[_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function normalizeItemTypeName(value) {
+  if (!value) return "";
+  const match = itemTypes.find((item) => item.value === value);
+  if (match) return match.label;
+  return String(value)
+    .replace(/[_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function getItemTypeLabel(value) {
   return (
     itemTypes.find((item) => item.value === value)?.label ||

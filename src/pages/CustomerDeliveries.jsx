@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import CustomerLayout from "../layout/CustomerLayout.jsx";
-import { truckTypes, getItemTypeLabel } from "../lib/deliveryOptions.js";
+import { truckTypes, getItemTypeLabel, normalizeTruckTypeName, normalizeItemTypeName } from "../lib/deliveryOptions.js";
 import { supabase } from "../lib/supabaseClient.js";
 import {
   manilaTodayISO,
@@ -1615,19 +1615,21 @@ function RequestDetailView({
   const itemLabel =
     request.itemType === "other"
       ? `Other: ${request.otherItemType}`
-      : getItemTypeLabel(request.itemType);
+      : normalizeItemTypeName(request.itemType);
   // The requested truck type (what the customer asked for) vs. the actual
   // truck the supervisor assigned (from the fleet). Once a truck is assigned,
   // the assigned truck's real type is shown as the primary "Truck Type" on
   // both the customer and supervisor sides; the requested type is kept only
   // as a note when it differs (a reefer may be assigned a dry van, etc.).
   const requestedTruckLabel =
-    truckTypes.find((t) => t.value === request.truckType)?.label ||
-    request.truckType;
-  const truckLabel = request.crew?.truck?.truckType || requestedTruckLabel;
+    truckTypes.find((t) => t.value === normalizeTruckTypeName(request.truckType))?.label ||
+    normalizeTruckTypeName(request.truckType);
+  const truckLabel = request.crew?.truck?.truckType
+    ? normalizeTruckTypeName(request.crew.truck.truckType)
+    : requestedTruckLabel;
   const requestedTruckNote =
     request.crew?.truck?.truckType &&
-    request.crew.truck.truckType !== requestedTruckLabel
+    normalizeTruckTypeName(request.crew.truck.truckType) !== requestedTruckLabel
       ? `Requested: ${requestedTruckLabel}`
       : null;
   const plateNumber = request.crew?.truck?.plateNumber;

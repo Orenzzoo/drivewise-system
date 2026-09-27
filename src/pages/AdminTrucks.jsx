@@ -20,6 +20,10 @@ const TRUCK_TYPES = [
   "4T DRY",
   "4T REF",
 ];
+// Normalize truck type values for comparisons (e.g. "1T_DRY" → "1T DRY")
+function normalizeTruckType(value) {
+  return String(value || "").replace(/_/g, " ");
+}
 import { supabase } from "../lib/supabaseClient.js";
 import useUserRole from "../hooks/useUserRole.js";
 
@@ -40,7 +44,9 @@ const TRUCK_TYPE_TAG_CLASSES = {
 
 function TypeTag({ type }) {
   // Map legacy "L300" to the new "LUV" identifier for backward compatibility.
-  const normalized = type === "L300" ? "LUV" : type;
+  // Also normalize underscored values like "1T_DRY" to "1T DRY".
+  const raw = type === "L300" ? "LUV" : type;
+  const normalized = String(raw).replace(/_/g, " ");
   return (
     <span
       className={`inline-flex min-w-[78px] items-center justify-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.01em] ${
@@ -430,7 +436,7 @@ function AdminTrucks() {
   const typeCounts = useMemo(() => {
     const counts = { All: trucks.length };
     TYPE_OPTIONS.forEach((type) => {
-      counts[type] = trucks.filter((t) => t.truck_type === type).length;
+      counts[type] = trucks.filter((t) => normalizeTruckType(t.truck_type) === type).length;
     });
     return counts;
   }, [trucks]);
@@ -479,7 +485,7 @@ function AdminTrucks() {
               .includes(query);
 
         const matchesType =
-          selectedType === "All" || truck.truck_type === selectedType;
+          selectedType === "All" || normalizeTruckType(truck.truck_type) === selectedType;
         const matchesStatus =
           selectedStatus === "All" || (truck.status ?? "-") === selectedStatus;
         const matchesPms =
@@ -496,9 +502,9 @@ function AdminTrucks() {
 
         // If creation dates are equal, fall back to type order.
         const leftOrder =
-          TRUCK_TYPE_ORDER[leftTruck.truck_type] ?? Number.MAX_SAFE_INTEGER;
+          TRUCK_TYPE_ORDER[normalizeTruckType(leftTruck.truck_type)] ?? Number.MAX_SAFE_INTEGER;
         const rightOrder =
-          TRUCK_TYPE_ORDER[rightTruck.truck_type] ?? Number.MAX_SAFE_INTEGER;
+          TRUCK_TYPE_ORDER[normalizeTruckType(rightTruck.truck_type)] ?? Number.MAX_SAFE_INTEGER;
         if (leftOrder !== rightOrder) return leftOrder - rightOrder;
 
         // Finally, sort by plate number for deterministic ordering.
