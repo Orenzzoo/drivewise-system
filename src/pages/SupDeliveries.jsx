@@ -4312,7 +4312,7 @@ function CancelledDeliveryDetails({ delivery }) {
             <Row label="Driver" value={delivery.crew.driver.name} />
             <Row
               label="Truck"
-              value={`${delivery.crew.truck.plateNumber} • ${delivery.crew.truck.truckType}`}
+               value={`${delivery.crew.truck.plateNumber} • ${normalizeTruckTypeName(delivery.crew.truck.truckType)}`}
             />
             <Row
               label="Helpers"
@@ -8033,8 +8033,8 @@ function SupDeliveries() {
                                     matchingTrucks.length === 0 && (
                                       <p className="border-t border-slate-100 px-3 py-2 text-xs font-medium text-amber-600">
                                         {requiresSpecializedCrew
-                                          ? `No ${selectedRequest.truckType} trucks with specialized crew available for this client.`
-                                          : `No truck matches the requested type (${selectedRequest.truckType}).`}
+                                          ? `No ${normalizeTruckTypeName(selectedRequest.truckType)} trucks with specialized crew available for this client.`
+                                          : `No truck matches the requested type (${normalizeTruckTypeName(selectedRequest.truckType)}).`}
                                       </p>
                                     )}
                                 </div>
@@ -8483,15 +8483,15 @@ function SupDeliveries() {
                             </div>
                           )}
                           <div className="border-t border-slate-200 pt-3 flex items-center gap-3">
-                            <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
-                              {selectedTruck.truckType}
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {selectedTruck.plateNumber}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {selectedTruck.truckType} •{" "}
+                             <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
+                               {normalizeTruckTypeName(selectedTruck.truckType)}
+                             </span>
+                             <div>
+                               <p className="text-sm font-semibold text-slate-900">
+                                 {selectedTruck.plateNumber}
+                               </p>
+                               <p className="text-xs text-slate-500">
+                                 {normalizeTruckTypeName(selectedTruck.truckType)} •{" "}
                                 {selectedTruck.capacity}
                               </p>
                             </div>
@@ -9219,8 +9219,8 @@ function SupDeliveries() {
                                     <Truck className="mr-1 inline h-3.5 w-3.5" />
                                     {monitoredDelivery.crew?.truck
                                       ?.plateNumber || "Truck TBA"}
-                                    {monitoredDelivery.crew?.truck &&
-                                      ` • ${monitoredDelivery.crew.truck.truckType}`}
+                                     {monitoredDelivery.crew?.truck &&
+                                       ` • ${normalizeTruckTypeName(monitoredDelivery.crew.truck.truckType)}`}
                                   </p>
                                 </div>
                               </div>
@@ -9257,7 +9257,7 @@ function SupDeliveries() {
                                     .truck?.plateNumber || "Truck TBA"}
                                   {monitoringByDelivery[monitoredDelivery.id]
                                     .truck &&
-                                    ` • ${monitoringByDelivery[monitoredDelivery.id].truck.truckType}`}
+                                     ` • ${normalizeTruckTypeName(monitoringByDelivery[monitoredDelivery.id].truck.truckType)}`}
                                 </p>
                               </div>
                             </div>

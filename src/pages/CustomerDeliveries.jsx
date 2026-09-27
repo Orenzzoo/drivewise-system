@@ -2960,7 +2960,7 @@ function RequestDetailView({
                 {request.crew?.truck && (
                   <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-center text-[10px] font-bold leading-tight text-slate-600">
-                      {request.crew.truck.truckType}
+                       {normalizeTruckTypeName(request.crew.truck.truckType)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-slate-900">

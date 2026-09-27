@@ -76,6 +76,7 @@ import {
   MANILA_TIMEZONE,
 } from "../lib/manilaTime.js";
 import { COMPLETED_REPORT_DATA, buildRealDriverTripReport } from "../lib/driverReportData.js";
+import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -3862,7 +3863,7 @@ function DeliveryDetailView({
                     {delivery.crew.truck.plateNumber}
                   </span>
                   <span className="truncate text-slate-500">
-                    &bull; {delivery.crew.truck.truckType} &bull;{" "}
+                     &bull; {normalizeTruckTypeName(delivery.crew.truck.truckType)} &bull;{" "}
                     {delivery.crew.truck.capacity}
                   </span>
                 </div>
@@ -5860,7 +5861,7 @@ function DriverDeliveries() {
                                 {workspaceDelivery.crew.truck.plateNumber}
                               </span>
                               <span className="truncate text-slate-500">
-                                &bull; {workspaceDelivery.crew.truck.truckType} &bull;{" "}
+                                 &bull; {normalizeTruckTypeName(workspaceDelivery.crew.truck.truckType)} &bull;{" "}
                                 {workspaceDelivery.crew.truck.capacity}
                               </span>
                             </div>
