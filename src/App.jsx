@@ -36,6 +36,7 @@ const SupAnalysisIndiv = lazy(() => import("./pages/SupAnalysisIndiv.jsx"));
 const SupProfile = lazy(() => import("./pages/SupProfile.jsx"));
 const SupTrucks = lazy(() => import("./pages/SupTrucks.jsx"));
 const SupTruckProfile = lazy(() => import("./pages/SupTruckProfile.jsx"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword.jsx"));
 
 function RouteFallback() {
   return (
@@ -51,6 +52,11 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/landing" element={<LandingPage />} />
+        {/* Password-reset landing for the emailed recovery link. Public (no
+            auth — the user can't sign in, that's the point); the one-time
+            tokens travel in the URL hash and supabase-js exchanges them for
+            a session on load. */}
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Customer portal — requires Customer role. Home page removed
            2026-09-18, per explicit user request -- Deliveries is now the

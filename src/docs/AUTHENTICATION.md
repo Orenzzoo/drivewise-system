@@ -62,6 +62,44 @@ browser is signed out and returned to Login with an explanatory
 message. Explicit logout releases the recorded session
 (`releaseActiveSession` in `LogoutButton.jsx`).
 
+## Password Reset (link-based)
+
+Password resets use a single-use emailed recovery link — never a
+plaintext password.
+
+- **Admin-initiated** (`AdminHome.jsx` "Reset Password"): calls the
+  `admin-users` Edge Function's `reset-password` action, which does NOT
+  change the password — the current one keeps working until the user
+  actually sets a new one. The function mints a recovery link via
+  `auth.admin.generateLink({ type: "recovery", ... })` redirecting to
+  `/reset-password` and emails it with a role-themed template
+  ("Set a New Password" CTA, no credentials in the email). Response:
+  `{ ok, emailSent, emailError?, resetUrl? }` — `resetUrl` is returned
+  only when the email failed so the admin can share it manually (shown
+  in the copyable break-all modal).
+- **Self-service** (Login page "Forgot password?"): calls the same
+  Edge Function's unauthenticated `forgot-password` action with the
+  user's personal profile email. The action resolves it to an auth user
+  via `ilike` across all five `*_records` tables (login emails are
+  generated `*@marveltrucking` addresses; real inboxes live on the
+  profile rows), then emails the same recovery link. The response is
+  ALWAYS the generic `{ ok: true }` — never whether or not an account
+  matched (no account enumeration) — with a best-effort 60s per-email
+  in-memory cooldown.
+- **Reset page** (`src/pages/ResetPassword.jsx`, public route
+  `/reset-password`): handles GoTrue's one-time-token hash exchange
+  (polls `getSession()` ~2s before declaring a link dead,
+  `onAuthStateChange` PASSWORD_RECOVERY/SIGNED_IN/INITIAL_SESSION →
+  ready, `error_code=otp_expired` → friendly expired state), then the
+  user picks a new password (≥8 chars, must match, trimmed) via
+  `supabase.auth.updateUser({ password })`, sees a success screen, is
+  signed out, and returns to Login. The hash is cleared after exchange
+  so a refresh can't replay the consumed token.
+
+The legacy temp-password reset flow is gone; `generateTempPassword()`
+remains only for the create-user welcome email (whose fallback modal
+still shows it).
+
 ## Admin-created Accounts
 
 Higher-privilege accounts are created through the

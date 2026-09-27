@@ -413,6 +413,12 @@ function emailThemeForRole(role: string): EmailTheme {
 // renders in Outlook, Gmail, Apple Mail, and mobile clients. Colors come
 // from the recipient's role theme (see ROLE_EMAIL_THEME); body text stays
 // slate (#0f172a / #64748b) across all roles.
+//
+// `ctaUrl` overrides the CTA button target (the recovery email points the
+// button at the reset link instead of the login page). `finePrint` replaces
+// the line under the button — the reset template's button is a one-time
+// link, not a login shortcut, so the "copy your credentials from the box
+// above" text would be wrong for it.
 function emailShell(opts: {
   preheader: string;
   eyebrow: string;
@@ -421,12 +427,20 @@ function emailShell(opts: {
   bodyHtml: string;
   ctaLabel: string;
   theme: EmailTheme;
+  ctaUrl?: string;
+  finePrint?: string;
   footerNote?: string;
 }): string {
-  const ctaUrl = loginPageUrl();
+  const ctaUrl = opts.ctaUrl
+    ? escapeEmailHtml(
+        opts.ctaUrl.trim().replace(/\/+$/, ""),
+      )
+    : loginPageUrl();
   const theme = opts.theme;
   const footerNote = opts.footerNote ||
     "You received this email because a DriveWise administrator manages your fleet account.";
+  const finePrint = opts.finePrint ||
+    "Button not working? Copy your login email and temporary password from the box above, then sign in on the DriveWise login page.";
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -474,7 +488,7 @@ function emailShell(opts: {
 </table>
 </td></tr>
 </table>
-<p style="margin:10px 0 0;font-size:12px;line-height:18px;color:#94a3b8;text-align:center;">Button not working? Copy your login email and temporary password from the box above, then sign in on the DriveWise login page.</p>
+<p style="margin:10px 0 0;font-size:12px;line-height:18px;color:#94a3b8;text-align:center;">${finePrint}</p>
 </td></tr>
 </table>
 </td></tr>
@@ -541,23 +555,44 @@ ${credentialRow("TEMPORARY PASSWORD", opts.tempPassword)}
   });
 }
 
-// Template B — admin-initiated password reset. Variables: {{name}},
-// {{role}}, {{loginEmail}}, {{tempPassword}}.
+// Template B — password reset. Two modes: the legacy temp-password mode
+// ({{tempPassword}} box, "Login Now" CTA) and the recovery-link mode
+// (`opts.resetLink` — the single-use link points straight at the reset page
+// and no credentials are included).
 function buildPasswordResetEmail(opts: {
   name: string;
   role: string;
   loginEmail: string;
-  tempPassword: string;
+  tempPassword?: string;
+  resetLink?: string;
+  expiryMinutes?: number;
 }): string {
   const displayName = opts.name.trim() || "there";
   const theme = emailThemeForRole(opts.role.trim() || "Member");
-  const introHtml = `<p style="margin:0 0 12px;">Hi ${escapeEmailHtml(displayName)},</p>
+  const introHtml = opts.resetLink
+    ? `<p style="margin:0 0 12px;">Hi ${escapeEmailHtml(displayName)},</p>
+<p style="margin:0 0 12px;">An administrator or a "forgot password" request started a reset of your DriveWise password. Tap the button below to set a new password.</p>`
+    : `<p style="margin:0 0 12px;">Hi ${escapeEmailHtml(displayName)},</p>
 <p style="margin:0 0 12px;">An administrator has reset your DriveWise password. Use the temporary password below to sign back in, then change it to something only you know.</p>`;
-  const bodyHtml = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin:18px 0;padding:18px;">
+  const bodyHtml = opts.resetLink
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin:18px 0;padding:18px;">
+<tr><td>
+<p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;letter-spacing:1.5px;color:${theme.accent};">PASSWORD RESET LINK</p>
+<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#334155;">Use the button below to choose a new password. This link is single-use and expires in ${escapeEmailHtml(
+        String(opts.expiryMinutes ?? 60),
+      )} minutes.</p>
+</td></tr>
+</table>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#fffbeb;border:1px solid #fcd34d;border-radius:10px;margin:0 0 6px;padding:14px 16px;">
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#92400e;">
+<strong>Security notice:</strong> Your current password keeps working until you actually set a new one. If you did not request this, please contact your fleet supervisor immediately.
+</td></tr>
+</table>`
+    : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin:18px 0;padding:18px;">
 <tr><td>
 <p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;letter-spacing:1.5px;color:${theme.accent};">YOUR NEW SIGN-IN DETAILS</p>
 ${credentialRow("LOGIN EMAIL", opts.loginEmail)}
-${credentialRow("TEMPORARY PASSWORD", opts.tempPassword)}
+${credentialRow("TEMPORARY PASSWORD", opts.tempPassword || "")}
 </td></tr>
 </table>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#fffbeb;border:1px solid #fcd34d;border-radius:10px;margin:0 0 6px;padding:14px 16px;">
@@ -566,13 +601,21 @@ ${credentialRow("TEMPORARY PASSWORD", opts.tempPassword)}
 </td></tr>
 </table>`;
   return emailShell({
-    preheader: "Your DriveWise password was reset — sign in with your temporary password.",
+    preheader: opts.resetLink
+      ? "Set a new DriveWise password — your secure reset link is inside."
+      : "Your DriveWise password was reset — sign in with your temporary password.",
     eyebrow: "PASSWORD RESET",
-    title: `Your password was reset, ${displayName}.`,
+    title: opts.resetLink
+      ? `Set a new password, ${displayName}.`
+      : `Your password was reset, ${displayName}.`,
     introHtml,
     bodyHtml,
-    ctaLabel: "Login Now",
+    ctaLabel: opts.resetLink ? "Set a New Password" : "Login Now",
     theme,
+    ctaUrl: opts.resetLink,
+    finePrint: opts.resetLink
+      ? "The button above is the only way to set the new password. Copy it from the email and open it on your phone or computer. Do not forward it — the link is single-use."
+      : undefined,
   });
 }
 
@@ -585,7 +628,7 @@ async function sendCredentialsEmail(
   loginEmail: string,
   tempPassword: string,
   heading: string,
-  opts?: { name?: string; role?: string; kind?: "welcome" | "reset" },
+  opts?: { name?: string; role?: string; kind?: "welcome" | "reset"; resetLink?: string; expiryMinutes?: number },
 ) {
   if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) {
     return {
@@ -609,6 +652,8 @@ async function sendCredentialsEmail(
       role: roleName,
       loginEmail,
       tempPassword,
+      resetLink: opts?.resetLink,
+      expiryMinutes: opts?.expiryMinutes,
     })
     : buildWelcomeEmail({
       name: displayName,
@@ -638,6 +683,108 @@ async function sendCredentialsEmail(
   }
 
   return { sent: true as const };
+}
+
+// Sends the single-use password-reset link (no credentials) to the
+// account's contact email via Resend. Same delivery contract as
+// sendCredentialsEmail: returns { sent: false, error } instead of throwing
+// so a delivery failure never rolls back the caller's flow — the caller
+// falls back to returning the raw link directly.
+async function sendRecoveryLinkEmail(
+  to: string,
+  resetLink: string,
+  opts?: { name?: string; role?: string; expiryMinutes?: number },
+) {
+  if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) {
+    return {
+      sent: false,
+      error:
+        "Email delivery is not configured (missing RESEND_API_KEY/RESEND_FROM_EMAIL).",
+    };
+  }
+
+  const displayName = (opts?.name || "").trim() || "there";
+  const roleName = (opts?.role || "").trim() || "Member";
+  const html = buildPasswordResetEmail({
+    name: displayName,
+    role: roleName,
+    loginEmail: "",
+    resetLink,
+    expiryMinutes: opts?.expiryMinutes,
+  });
+  const subject = "Set a new DriveWise password";
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from: RESEND_FROM_EMAIL, to, subject, html }),
+  }).catch(() => null);
+
+  if (!response || !response.ok) {
+    const message = response ? await response.text() : "Network error sending email";
+    return {
+      sent: false,
+      error: message || `Resend responded with ${response?.status}`,
+    };
+  }
+
+  return { sent: true as const };
+}
+
+// Best-effort per-email cooldown for the unauthenticated forgot-password
+// action. In-memory only (resets on deploy/restart) — enough to slow
+// enumeration attempts without needing a table. Returns the number of
+// seconds the caller must wait before allowing another request, or 0.
+const FORGOT_PASSWORD_COOLDOWN_SECONDS = 60;
+const lastForgotPasswordRequestAt = new Map<string, number>();
+
+function forgotPasswordCooldownRemaining(email: string): number {
+  const last = lastForgotPasswordRequestAt.get(email) ?? 0;
+  const elapsed = Math.floor((Date.now() - last) / 1000);
+  return Math.max(0, FORGOT_PASSWORD_COOLDOWN_SECONDS - elapsed);
+}
+
+function recordForgotPasswordRequest(email: string): void {
+  lastForgotPasswordRequestAt.set(email, Date.now());
+}
+
+// Resolves a personal profile email (the one the user would actually type
+// on the forgot-password form) to its auth user id. Login emails are
+// generated *@marveltrucking addresses, so the match runs ilike across all
+// five *_records tables. Returns null when nothing matches — callers must
+// still respond generically so the null case can't be distinguished from a
+// real match.
+async function findAuthIdByContactEmail(
+  // deno-lint-ignore no-explicit-any -- ReturnType<typeof createClient> with
+  // no Database generic (none exists anywhere in this codebase) collapses
+  // every chained .from()/.select() call to `never`; same fix already used
+  // by driver-trip/index.ts's closeReturnTripSession.
+  adminClient: any,
+  email: string,
+): Promise<string | null> {
+  const needle = email.trim().toLowerCase();
+  if (!needle) return null;
+
+  for (const table of Object.values(ROLE_TABLE)) {
+    const { data, error } = await adminClient
+      .from(table)
+      .select("auth_id")
+      .ilike("email", needle)
+      .limit(1);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+    const authId = data?.[0]?.auth_id as string | undefined;
+    if (authId) {
+      return authId;
+    }
+  }
+
+  return null;
 }
 
 type ProfileInput = {
@@ -999,6 +1146,90 @@ Deno.serve(async (req) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
+  // Parsed before the auth gate so the unauthenticated forgot-password
+  // action (below) reads the same body. Service-role client hoisted here so
+  // it serves both that action and the gated ones below, which previously
+  // declared their own copy.
+  const body = await req.json();
+  const { action } = body;
+  const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+  // forgot-password is unauthenticated (the user can't sign in — that's
+  // the point), so it runs before the auth gate. The response is ALWAYS the
+  // generic { ok: true } whether or not an account matches the typed email,
+  // so a failed lookup is indistinguishable from a real one (no account
+  // enumeration).
+  if (action === "forgot-password") {
+    const email = typeof body.email === "string"
+      ? body.email.trim().toLowerCase()
+      : "";
+
+    if (!email) {
+      return json({ error: "email is required" }, 400);
+    }
+
+    // Best-effort per-email cooldown — even a throttled request gets the
+    // generic ok response.
+    if (forgotPasswordCooldownRemaining(email) > 0) {
+      return json({ ok: true });
+    }
+    recordForgotPasswordRequest(email);
+
+    // Login emails are generated marveltrucking addresses; the email typed
+    // here is the personal one on the profile record, so resolve it back to
+    // the auth user across all five role tables.
+    const authId = await findAuthIdByContactEmail(adminClient, email)
+      .catch(() => null);
+
+    if (authId) {
+      let name = "";
+      let roleName = "";
+      try {
+        const { data: userRow } = await adminClient
+          .from("users")
+          .select("role")
+          .eq("id", authId)
+          .maybeSingle();
+        roleName = userRow?.role ?? "";
+        const table = roleName ? ROLE_TABLE[roleName] : undefined;
+        if (table) {
+          const { data: profile } = await adminClient
+            .from(table)
+            .select("first_name, middle_name, last_name")
+            .eq("auth_id", authId)
+            .maybeSingle();
+          if (profile) {
+            name = [
+              profile.first_name,
+              profile.middle_name,
+              profile.last_name,
+            ].filter(Boolean).join(" ");
+          }
+        }
+      } catch {
+        name = "";
+        roleName = "";
+      }
+
+      const { data: linkData, error: linkError } =
+        await adminClient.auth.admin.generateLink({
+          type: "recovery",
+          userId: authId,
+          options: { redirectTo: `${loginPageUrl()}reset-password` },
+        });
+
+      if (!linkError && linkData?.properties?.email_action_link) {
+        await sendRecoveryLinkEmail(
+          email,
+          linkData.properties.email_action_link as string,
+          { name, role: roleName },
+        ).catch(() => {});
+      }
+    }
+
+    return json({ ok: true });
+  }
+
   const authHeader = req.headers.get("Authorization") ?? "";
   const callerToken = authHeader.replace("Bearer ", "");
 
@@ -1018,8 +1249,6 @@ Deno.serve(async (req) => {
     return json({ error: "Invalid session" }, 401);
   }
 
-  const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
   const { data: callerRow, error: callerRowError } = await adminClient
     .from("users")
     .select("role")
@@ -1029,9 +1258,6 @@ Deno.serve(async (req) => {
   if (callerRowError || !callerRow) {
     return json({ error: "Forbidden" }, 403);
   }
-
-  const body = await req.json();
-  const { action } = body;
 
   // get-own-profile lets any signed-in user read their own row — merges
   // `users` with the caller's own `*_records` row by auth_id, the same way
@@ -2674,29 +2900,38 @@ Deno.serve(async (req) => {
       resetName = "";
     }
 
-    const tempPassword = generateTempPassword();
+    // Link mode: the password is NOT changed here — the old one keeps
+    // working until the user actually sets a new one through the link.
+    // generateLink mints a single-use recovery link that lands on the
+    // /reset-password page (FRONTEND_URL), where the user picks a new
+    // password. Falls back to returning the raw link when the email
+    // can't be delivered.
+    const { data: linkData, error: linkError } =
+      await adminClient.auth.admin.generateLink({
+        type: "recovery",
+        userId,
+        options: { redirectTo: `${loginPageUrl()}reset-password` },
+      });
 
-    const { error } = await adminClient.auth.admin.updateUserById(userId, {
-      password: tempPassword,
-    });
-
-    if (error) {
-      return json({ error: error.message }, 400);
+    if (linkError || !linkData?.properties?.email_action_link) {
+      return json(
+        { error: linkError?.message || "Unable to generate reset link" },
+        400,
+      );
     }
 
-    const emailResult = await sendCredentialsEmail(
-      contactEmail,
-      userRow.login_email,
-      tempPassword,
-      "Your DriveWise password has been reset.",
-      { kind: "reset", name: resetName, role: userRow.role },
-    ).catch(() => ({ sent: false, error: "Email delivery failed due to a network error" }));
+    const resetLink = linkData.properties.email_action_link as string;
+
+    const emailResult = await sendRecoveryLinkEmail(contactEmail, resetLink, {
+      name: resetName,
+      role: userRow.role,
+    }).catch(() => ({ sent: false, error: "Email delivery failed due to a network error" }));
 
     return json({
       ok: true,
       emailSent: emailResult.sent,
       emailError: emailResult.sent ? undefined : emailResult.error,
-      tempPassword: emailResult.sent ? undefined : tempPassword,
+      resetUrl: emailResult.sent ? undefined : resetLink,
     });
   }
 
