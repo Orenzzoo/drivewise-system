@@ -194,7 +194,12 @@ export default function AdminDeliveryDetails() {
         ) : delivery.status === "CANCELLED" ? (
           <CancelledDeliveryDetails delivery={delivery} />
         ) : (
-          <CompletedDeliveryReport delivery={delivery} />
+          // hideEmptyTabs: tabs with genuinely no data (no quotation, no
+          // trip sessions) are hidden instead of rendering empty -- Details
+          // always stays. (An empty Quotation tab before the
+          // 20260927120000_admin_read_delivery_quotations migration is
+          // deployed is a permissions gap, not missing data -- see STATUS.md.)
+          <CompletedDeliveryReport delivery={delivery} hideEmptyTabs />
         )}
       </div>
     </AdminLayout>

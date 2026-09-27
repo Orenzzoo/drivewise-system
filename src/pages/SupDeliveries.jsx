@@ -4032,7 +4032,10 @@ function RerouteEventsSection({ rerouteEvents }) {
 // (ProtectedRoute bounces Admins off /supervisor/*, and SupLayout must
 // never render for them). Read-only -- the interactive quotation/
 // assignment workflow lives in the inbox modal, not here.
-export function CompletedDeliveryReport({ delivery }) {
+export function CompletedDeliveryReport({
+  delivery,
+  hideEmptyTabs = false,
+}) {
   const [reportTab, setReportTab] = useState("details");
   // Real Trip Details / DriveWise Report data (2026-08-14), fetched per
   // delivery from sessions/alerts/gps_logs -- see buildRealTripAndBehaviorReport.
@@ -4151,9 +4154,19 @@ export function CompletedDeliveryReport({ delivery }) {
   // identical fix).
   const hasRouteTabContent =
     Boolean(report?.routeDeviation) || report?.rerouteEvents?.length > 0;
-  const tabs = report
+  // hideEmptyTabs (Admin details page): drop tabs that would render with no
+  // data instead of showing them empty -- the Details tab always stays.
+  // Trip/Behavior/Route are already report-gated above; only Quotation needs
+  // an explicit content check (a delivery with no submitted quotation).
+  const hasQuotation = Boolean(
+    delivery.quotation || delivery.updatedQuotation || delivery.approvedAmount,
+  );
+  let tabs = report
     ? REPORT_TABS.filter((t) => t.id !== "route" || hasRouteTabContent)
     : REPORT_TABS.filter((t) => t.id === "details" || t.id === "quotation");
+  if (hideEmptyTabs && !hasQuotation) {
+    tabs = tabs.filter((t) => t.id !== "quotation");
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

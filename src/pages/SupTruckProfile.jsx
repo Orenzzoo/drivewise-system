@@ -1,6 +1,6 @@
 import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
 import { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import SupLayout from "../layout/SupLayout.jsx";
 import { DatePicker } from "../components/DateTimePicker.jsx";
 // import AddTruckModal from "../components/AddTruckModal.jsx"; // Disabled for supervisor view
@@ -355,6 +355,7 @@ function PaginationBar({ page, setPage, totalPages }) {
 
 function SupTruckProfile() {
   const location = useLocation();
+  const navigate = useNavigate();
   const initialTruck = location.state?.truck;
   // Local mutable copy of the truck data that can be refreshed after updates.
   const [truck, setTruck] = useState(initialTruck);
@@ -514,8 +515,20 @@ function SupTruckProfile() {
   //   loadDevices();
   // }, []);
 
-  // Open the View modal for a specific trip
+  // Open the delivery details for a trip on the Deliveries page.
+  // SupDeliveries.jsx auto-opens location.state.openDeliveryId (routing by
+  // status: cancelled -> cancelled report, completed/delivered -> completed
+  // report, anything else -> transit monitor), so the Supervisor lands
+  // directly on the details. The ViewModal below is kept only as the
+  // fallback for rows without a delivery id (real trips always have one --
+  // they are delivery_requests rows).
   const openViewModal = (trip) => {
+    if (trip?.id) {
+      navigate("/supervisor/deliveries", {
+        state: { openDeliveryId: trip.id },
+      });
+      return;
+    }
     setSelectedTrip(trip);
     setViewModalOpen(true);
   };
@@ -1052,7 +1065,8 @@ function SupTruckProfile() {
               </div>
             </>
           )}
-          {/* View modal for delivery request details */}
+            {/* Fallback View modal for delivery request details -- only opens
+            when a row has no delivery id to navigate to (see openViewModal) */}
           <ViewModal
             isOpen={isViewModalOpen}
             onClose={closeViewModal}
