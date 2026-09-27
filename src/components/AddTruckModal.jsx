@@ -6,7 +6,10 @@ import {
   DEFAULT_MAINTENANCE_INTERVAL_KM,
   DEFAULT_MAINTENANCE_INTERVAL_MONTHS,
 } from "../constants/pms.js";
-import { completeInProgressMaintenance } from "./trucks/utils/maintenance.js";
+import {
+  completeInProgressMaintenance,
+  maintenanceStartMileageUpdate,
+} from "./trucks/utils/maintenance.js";
 import { MonthPicker } from "./DateTimePicker.jsx";
 
 // Duplicate options to avoid circular imports
@@ -334,13 +337,16 @@ export default function AddTruckModal({
         formData.brand === "Custom" ? formData.customBrand : formData.brand;
       const finalModel =
         formData.model === "Custom" ? formData.customModel : formData.model;
+      // NOTE: previous_mileage / previous_maintenance_date are deliberately
+      // NOT sent here. The form stopped collecting them (its fields are
+      // commented out above), so referencing formData.previous_* always
+      // produced undefined -> null and every truck edit silently wiped the
+      // Previous Mileage baseline a maintenance had just archived. Omitting
+      // the keys leaves the stored values untouched.
       const editPayload = isSupervisor
         ? {
             status: formData.status || null,
             current_mileage: formData.current_mileage || null,
-            previous_maintenance_date:
-              formData.previous_maintenance_date || null,
-            previous_mileage: formData.previous_mileage || null,
             maintenance_interval_km: formData.maintenance_interval_km || null,
             maintenance_interval_months:
               formData.maintenance_interval_months || null,
@@ -355,9 +361,6 @@ export default function AddTruckModal({
             max_capacity: formData.max_capacity || null,
             // container dimensions removed (no longer in DB schema)
             current_mileage: formData.current_mileage || null,
-            previous_maintenance_date:
-              formData.previous_maintenance_date || null,
-            previous_mileage: formData.previous_mileage || null,
             maintenance_interval_km: formData.maintenance_interval_km || null,
             maintenance_interval_months:
               formData.maintenance_interval_months || null,
@@ -443,8 +446,11 @@ export default function AddTruckModal({
               truck_id: initialData?.id,
               start_date: todayISO(),
               end_date: todayISO(),
-              mileage: Number(formData.current_mileage) || 0,
-              // Store the mileage at the time of service for later calculations
+              // Column names per the maintenance_records schema -- there is no
+              // `mileage` column on this table (this insert used to fail
+              // because of it); mirror the profile pages' own "Add Record"
+              // modal and set `current_mileage` + `mileage_at_service`.
+              current_mileage: Number(formData.current_mileage) || 0,
               mileage_at_service: Number(formData.current_mileage) || 0,
               type: "Preventive Maintenance",
               shop: "In-House",
@@ -454,10 +460,30 @@ export default function AddTruckModal({
             });
           if (maintError) {
             setValidationToast({
-              message:
-                "Failed to create maintenance record: " + maintError.message,
+              message: "Failed to create maintenance record: " + maintError.message,
               type: "error",
             });
+          } else if (initialData?.id) {
+            // The maintenance is starting now: archive Current Mileage as
+            // Previous Mileage and reset Current Mileage to 0 (same rule the
+            // Sup/Admin profile pages apply -- shared helper, one definition).
+            const { error: mileageError } = await supabase
+              .from("trucks")
+              .update(
+                maintenanceStartMileageUpdate(
+                  formData.current_mileage,
+                  todayISO(),
+                ),
+              )
+              .eq("id", initialData.id);
+            if (mileageError) {
+              setValidationToast({
+                message:
+                  "Maintenance logged, but resetting mileage failed: " +
+                  mileageError.message,
+                type: "error",
+              });
+            }
           }
         }
       }

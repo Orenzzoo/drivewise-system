@@ -7,6 +7,7 @@ import {
   getPmsStatus,
   getPmsStatusDisplayLabel,
 } from "../components/trucks/utils/pms.js";
+import { maintenanceStartMileageUpdate } from "../components/trucks/utils/maintenance.js";
 import AddTruckModal from "../components/AddTruckModal.jsx";
 import { Search, ChevronRight, Edit } from "lucide-react";
 // Truck type options are defined directly here as mockTrucks.js has been removed.
@@ -583,7 +584,12 @@ function SupTrucks() {
             truck_id: truckToEdit.id,
             start_date: todayISO(),
             end_date: todayISO(),
-            mileage: Number(payload.current_mileage) || 0,
+            // Column names per the maintenance_records schema -- `mileage`
+            // does not exist on this table (this insert used to fail because
+            // of it), the record stores `current_mileage` + `mileage_at_service`
+            // like the profile pages' own "Add Record" modal does.
+            current_mileage: Number(payload.current_mileage) || 0,
+            mileage_at_service: Number(payload.current_mileage) || 0,
             type: "Preventive Maintenance",
             shop: "In-House",
             notes: "",
@@ -596,6 +602,27 @@ function SupTrucks() {
               "Failed to create maintenance record: " + maintError.message,
             type: "error",
           });
+        } else if (truckToEdit.id) {
+          // The maintenance is starting now: archive Current Mileage as
+          // Previous Mileage and reset Current Mileage to 0 (same rule the
+          // Sup/Admin profile pages apply -- shared helper, one definition).
+          const { error: mileageError } = await supabase
+            .from("trucks")
+            .update(
+              maintenanceStartMileageUpdate(
+                payload.current_mileage,
+                todayISO(),
+              ),
+            )
+            .eq("id", truckToEdit.id);
+          if (mileageError) {
+            setToast({
+              message:
+                "Maintenance logged, but resetting mileage failed: " +
+                mileageError.message,
+              type: "error",
+            });
+          }
         }
       }
     }

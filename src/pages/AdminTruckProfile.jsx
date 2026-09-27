@@ -27,6 +27,7 @@ import {
   getLastMaintenanceDate,
   getLatestMaintenance,
   getPreviousMileageFromRecords,
+  maintenanceStartMileageUpdate,
 } from "../components/trucks/utils/maintenance.js";
 import ViewModal from "../components/ViewModal.jsx";
 
@@ -438,7 +439,10 @@ function AdminTruckProfile() {
   } else if (!isLogMaintenanceModalOpen && shopPrefilledFor) {
     setShopPrefilledFor(false);
   }
-  // Fetch the latest truck data after an edit. Uses plate_number as identifier.
+  // Fetch the latest truck row. Navigation state (location.state.truck) is
+  // only a snapshot taken when the Trucks list was rendered -- current_mileage
+  // keeps changing in the DB as sessions close, so the profile re-reads it
+  // instead of trusting that snapshot.
   const fetchTruck = async () => {
     if (!truck?.plate_number) return;
     const { data, error } = await supabase
@@ -452,6 +456,39 @@ function AdminTruckProfile() {
       setTruck(data);
     }
   };
+
+  // Refresh once on mount so the Current Mileage card shows the real DB value.
+  useEffect(() => {
+    // Deferred so the fetch's setState doesn't run synchronously in the
+    // effect body (same pattern as the maintenance-records effect below).
+    Promise.resolve().then(() => fetchTruck());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the card live while the profile is open: driver-trip/gps-upload add
+  // the session's distance to trucks.current_mileage when a session closes, so
+  // subscribe to this truck's row rather than requiring a reload to see it.
+  useEffect(() => {
+    if (!truck?.id) return;
+    const channel = supabase
+      .channel(`truck-profile-${truck.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trucks",
+          filter: `id=eq.${truck.id}`,
+        },
+        (payload) => {
+          setTruck((prev) => (prev ? { ...prev, ...payload.new } : prev));
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [truck?.id]);
   // Auto‑clear toast after a short period (3 seconds)
   useEffect(() => {
     if (toast) {
@@ -647,58 +684,28 @@ function AdminTruckProfile() {
   useEffect(() => {
     // loadMaintenanceRecords is a real async fetch from Supabase, not
     // derived state -- this is the correct, intentional use of an effect
-    // (synchronizing local state with an external data source when `truck`
+    // (synchronizing local state with an external data source when the truck
     // changes). `loadMaintenanceRecords` itself is deliberately omitted
     // from deps -- it's a plain function redefined every render, not
     // memoized; including it would refire this effect every render instead
-    // of only when `truck` changes.
+    // of only when the truck changes. Keyed on truck.id (not the whole truck
+    // object) so a realtime mileage update arriving on the profile doesn't
+    // refetch the record list every tick.
     Promise.resolve().then(() => {
       loadMaintenanceRecords();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [truck]);
+  }, [truck?.id]);
 
-  // Reset mileage to 0 after a maintenance record is marked Completed
-  useEffect(() => {
-    if (!truck) return;
-    const latest = getLatestMaintenance(maintenanceRecords);
-    if (
-      latest?.status === "Completed" &&
-      truck.current_mileage &&
-      truck.current_mileage !== 0
-    ) {
-      supabase
-        .from("trucks")
-        .update({ current_mileage: 0 })
-        .eq("id", truck.id)
-        .then(({ error }) => {
-          if (error) {
-            setToast({
-              message: "Error resetting mileage: " + error.message,
-              type: "error",
-            });
-          } else {
-            // Refresh truck data
-            supabase
-              .from("trucks")
-              .select("*")
-              .eq("id", truck.id)
-              .single()
-              .then(({ data, error: fetchError }) => {
-                if (!fetchError && data) setTruck(data);
-              });
-          }
-        });
-    }
-    // truck deliberately omitted -- this effect's own body calls setTruck
-    // (via the refetch above), so including truck would refire this effect
-    // on its own update, risking a loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maintenanceRecords]);
+  // NOTE: the old "reset mileage to 0 when the latest maintenance is
+  // Completed" effect was removed here. It re-ran every time the profile was
+  // opened (the latest record is almost always Completed), wiping all
+  // distance the truck had driven since that maintenance. The reset now only
+  // happens at the moment a maintenance starts -- see
+  // maintenanceStartMileageUpdate in components/trucks/utils/maintenance.js.
 
   // Auto‑complete any "In Progress" maintenance record when the truck's overall status changes
-  // from "Maintenance" to "Available". This ensures the Maintenance tab reflects a Completed status
-  // and triggers the mileage‑reset effect.
+  // from "Maintenance" to "Available". This ensures the Maintenance tab reflects a Completed status.
   useEffect(() => {
     if (!truck) return;
     // Only act when the truck is now Available.
@@ -804,6 +811,13 @@ function AdminTruckProfile() {
     setIsSubmitting(true);
 
     try {
+      // Mileage is archived from the truck's Current Mileage, never from the
+      // form field (that field is a read-only auto-fill of this same value).
+      const archivedMileage = Number(truck.current_mileage) || 0;
+      // A log saved as "In Progress" means the maintenance is starting now --
+      // that is the one event allowed to reset Current Mileage.
+      const startsNow = logStatus === "In Progress";
+
       // Step A: Insert new log into public.maintenance_records
       const { error: insertError } = await supabase
         .from("maintenance_records")
@@ -812,8 +826,8 @@ function AdminTruckProfile() {
           start_date: logDate,
           // Include end_date only if provided to avoid inserting nulls
           ...(logEndDate ? { end_date: logEndDate } : {}),
-          current_mileage: Number(logMileage),
-          mileage_at_service: Number(logMileage),
+          current_mileage: archivedMileage,
+          mileage_at_service: archivedMileage,
           type: logType,
           shop: logShop,
           notes: logNotes,
@@ -832,10 +846,6 @@ function AdminTruckProfile() {
       // status back to "Available" when the Admin left the checkbox checked
       // for a Completed log -- only when the truck is currently
       // "Maintenance", never overriding some other status (e.g. Inactive).
-      const newCurrentMileage = Math.max(
-        truck.current_mileage || 0,
-        Number(logMileage),
-      );
       const shouldMarkAvailable =
         logStatus === "Completed" &&
         logMarkAvailable &&
@@ -843,9 +853,13 @@ function AdminTruckProfile() {
       const { error: updateError } = await supabase
         .from("trucks")
         .update({
-          previous_maintenance_date: logDate,
-          previous_mileage: Number(logMileage),
-          current_mileage: newCurrentMileage,
+          // Maintenance starting now: archive Current Mileage as Previous
+          // Mileage, then reset Current Mileage to 0 (shared rule, identical
+          // in the Supervisor view). Any other log just records its date --
+          // it must not touch the mileage counters.
+          ...(startsNow
+            ? maintenanceStartMileageUpdate(archivedMileage, logDate)
+            : { previous_maintenance_date: logDate }),
           ...(shouldMarkAvailable ? { status: "Available" } : {}),
         })
         .eq("id", truck.id);
@@ -1288,10 +1302,15 @@ function AdminTruckProfile() {
                         type="number"
                         name="mileage"
                         value={logMileage}
-                        onChange={(e) => setLogMileage(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                        readOnly
+                        className="w-full px-3 py-2 border rounded-md bg-slate-50 text-slate-700"
                         required
                       />
+                      <p className="mt-1 text-xs text-slate-500">
+                        Auto-filled from Current Mileage. When this maintenance
+                        starts, it becomes Previous Mileage and Current Mileage
+                        resets to 0.
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1446,7 +1465,12 @@ function AdminTruckProfile() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsLogMaintenanceModalOpen(true)}
+                    onClick={() => {
+                      // Auto-fill the read-only mileage field with the truck's
+                      // Current Mileage so the log shows what will be archived.
+                      setLogMileage(String(Number(truck?.current_mileage) || 0));
+                      setIsLogMaintenanceModalOpen(true);
+                    }}
                     className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-violet-50 px-3.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 sm:text-sm"
                   >
                     <Wrench className="h-3.5 w-3.5" />
