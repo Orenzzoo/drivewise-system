@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 import LogoutButton from "./LogoutButton.jsx";
 import { useUserProfile } from "../lib/useUserInitials.js";
 import { useDeactivationGuard } from "../lib/useDeactivationGuard.js";
+import { useSingleSessionGuard } from '../hooks/useSingleSessionGuard.js';
 import { formatCutoff } from "../lib/deactivation.js";
 import { useSidebarBadges } from "../lib/useSidebarBadges.js";
 
@@ -29,7 +30,7 @@ const adminModules = [
     path: "/admin/device-management",
     description: "Fleet devices and status",
   },
-  // Trucks module – mirrors the supervisor's Trucks entry but for admin routes
+  // Trucks module Ã¢â‚¬â€œ mirrors the supervisor's Trucks entry but for admin routes
   {
     label: "Trucks",
     path: "/admin/trucks",
@@ -84,7 +85,7 @@ const adminIcons = {
       <path d="M17 16v-7" />
     </svg>
   ),
-  // Trucks icon – identical to supervisor's Trucks icon
+  // Trucks icon Ã¢â‚¬â€œ identical to supervisor's Trucks icon
   Trucks: (
     <svg
       viewBox="0 0 24 24"
@@ -135,6 +136,7 @@ function AdminLayout({ title, background, children, bg = "bg-white" }) {
   const { initials: userInitials, profilePicture, role } = useUserProfile();
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const deactivationWarning = useDeactivationGuard();
+  useSingleSessionGuard();
   const location = useLocation();
   const { overdueTrucks, scheduledTrucks } = useSidebarBadges({
     includeDeliveries: false,

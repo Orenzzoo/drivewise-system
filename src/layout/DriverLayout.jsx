@@ -4,6 +4,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import LogoutButton from "./LogoutButton.jsx";
 import { useUserProfile } from "../lib/useUserInitials.js";
 import { useDeactivationGuard } from "../lib/useDeactivationGuard.js";
+import { useSingleSessionGuard } from '../hooks/useSingleSessionGuard.js';
 import { formatCutoff } from "../lib/deactivation.js";
 
 const driverModules = [
@@ -70,6 +71,7 @@ function DriverLayout({ background, children }) {
   const navigate = useNavigate();
   const { initials: userInitials, profilePicture, role } = useUserProfile();
   const deactivationWarning = useDeactivationGuard();
+  useSingleSessionGuard();
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   const closeMobileMenuAfterDelay = (path) => {
@@ -202,7 +204,7 @@ function DriverLayout({ background, children }) {
         aria-label="Mobile navigation"
         onClick={(event) => event.stopPropagation()}
       >
-        {/* Header — the profile shortcut, since Profile isn't a nav item below. */}
+        {/* Header Ã¢â‚¬â€ the profile shortcut, since Profile isn't a nav item below. */}
         <button
           type="button"
           aria-label="Go to profile"
@@ -247,7 +249,7 @@ function DriverLayout({ background, children }) {
           aria-label="Main navigation"
           onClick={() => setIsExpanded((currentValue) => !currentValue)}
         >
-          {/* Header — the profile shortcut, since Profile isn't a nav item below. */}
+          {/* Header Ã¢â‚¬â€ the profile shortcut, since Profile isn't a nav item below. */}
           <button
             type="button"
             aria-label="Go to profile"

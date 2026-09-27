@@ -39,13 +39,28 @@ browser closes). The checkbox state itself is written to
 `signInWithPassword` is called, since the storage adapter checks
 that flag whenever Supabase persists a session.
 
-Restarting the Vite development server does not clear
-the current login session.
+Restarting the Vite development server does not clear the
+current login session.
 
 To switch accounts:
 
 - Logout normally, or
 - Navigate back to Login and sign in again.
+
+## Single Active Session
+
+An account can only be signed in in one browser/device at a time.
+Every successful sign-in records the new auth session id in the
+`user_sessions` table (`supabase/migrations/20260927000002_user_sessions.sql`),
+replacing whatever session was recorded before it — so signing in on a
+second device evicts the first. Each portal layout runs
+`useSingleSessionGuard()` (`src/hooks/useSingleSessionGuard.js`), which
+re-checks the recorded session id on mount, every 60 seconds, and
+whenever the tab becomes visible again. When the recorded id no longer
+matches the browser's own (i.e. the account signed in elsewhere), the
+browser is signed out and returned to Login with an explanatory
+message. Explicit logout releases the recorded session
+(`releaseActiveSession` in `LogoutButton.jsx`).
 
 ## Admin-created Accounts
 

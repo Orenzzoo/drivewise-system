@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, Eye, EyeOff, HelpCircle, Loader2, Lock, Mail } from 'lucide-react'
 import { REMEMBER_ME_KEY, supabase } from '../lib/supabaseClient.js'
+import { claimActiveSession, decodeSessionId } from '../lib/singleSession.js'
 import { getDeactivationStatus } from '../lib/deactivation.js'
 import logoMark from '../layout/images/Logoo.png'
 import marvelEmployees from '../layout/images/MarvelEmployees.png'
@@ -50,12 +51,33 @@ async function resolveHomeRoute(userId) {
 
 function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [formValues, setFormValues] = useState(initialForm)
   const [status, setStatus] = useState('empty')
   const [errorMessage, setErrorMessage] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  // Re-hydrate from the flag the storage adapter persists, so the checkbox
+  // reflects the choice saved by the previous sign-in instead of always
+  // starting unchecked.
+  const [rememberMe, setRememberMe] = useState(() => {
+    try {
+      return localStorage.getItem(REMEMBER_ME_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
   const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    if (!location.state?.sessionRevoked) {
+      return
+    }
+    setErrorMessage(
+      'This account was signed in on another device, so this session was ended.'
+    )
+    setStatus('error')
+    window.history.replaceState(null, '')
+  }, [location.state])
 
   useEffect(() => {
     let isCurrent = true
@@ -137,6 +159,13 @@ function Login() {
       setErrorMessage(roleError)
       setStatus('error')
       return
+    }
+
+    // Record this browser's auth session as the account's only active one,
+    // evicting any session recorded from another browser/device.
+    const sessionId = decodeSessionId(authData.session?.access_token)
+    if (sessionId) {
+      await claimActiveSession(authData.user.id, sessionId)
     }
 
     setStatus('empty')
