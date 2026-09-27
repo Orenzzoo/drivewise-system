@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AdminLayout from "../layout/AdminLayout.jsx";
 import { DatePicker } from "../components/DateTimePicker.jsx";
@@ -706,10 +706,20 @@ function AdminTruckProfile() {
 
   // Auto‑complete any "In Progress" maintenance record when the truck's overall status changes
   // from "Maintenance" to "Available". This ensures the Maintenance tab reflects a Completed status.
+  // Transition-guarded: fires ONLY when the status actually changed INTO
+  // "Available" since the previous run -- never merely because the record
+  // list refreshed while the truck was already Available. Without this,
+  // logging a fresh "In Progress" record completed itself on the
+  // post-submit refresh (and overwrote its end_date with today), because
+  // the truck was still sitting at "Available" when the new row landed.
+  const prevTruckStatusRef = useRef(truck?.status);
   useEffect(() => {
     if (!truck) return;
+    const prevStatus = prevTruckStatusRef.current;
+    prevTruckStatusRef.current = truck.status;
     // Only act when the truck is now Available.
     if (truck.status !== "Available") return;
+    if (prevStatus === "Available") return;
     // Find an in‑progress maintenance record, if any.
     const inProgress = maintenanceRecords.find(
       (r) => r.status === "In Progress",
@@ -850,6 +860,14 @@ function AdminTruckProfile() {
         logStatus === "Completed" &&
         logMarkAvailable &&
         truck.status === "Maintenance";
+      // An "In Progress" log means the truck is now under active
+      // maintenance: the parent row must follow it into "Maintenance",
+      // otherwise the fleet keeps dispatching it as Available/Active while
+      // it is being serviced (and the Available-guarded auto-complete
+      // effect below would instantly re-complete the record just created).
+      // "Inactive" is never touched -- a truck deactivated for
+      // non-maintenance reasons must not be resurrected by a log entry.
+      const shouldMarkMaintenance = startsNow && truck.status !== "Inactive";
       const { error: updateError } = await supabase
         .from("trucks")
         .update({
@@ -861,6 +879,7 @@ function AdminTruckProfile() {
             ? maintenanceStartMileageUpdate(archivedMileage, logDate)
             : { previous_maintenance_date: logDate }),
           ...(shouldMarkAvailable ? { status: "Available" } : {}),
+          ...(shouldMarkMaintenance ? { status: "Maintenance" } : {}),
         })
         .eq("id", truck.id);
 
@@ -872,11 +891,17 @@ function AdminTruckProfile() {
         return;
       }
 
-      // Step C: Refresh State
-      // Re-fetch maintenance records to instantly update the history table
-      await loadMaintenanceRecords();
+      // Step C: Refresh State -- truck FIRST, then records. Step B may have
+      // just moved the truck into "Maintenance" (or back to "Available");
+      // local state must reflect that before the refreshed record list
+      // (which now contains the new row) lands -- otherwise the
+      // Available-guarded auto-complete effect below observes a mixed state
+      // (old status + new "In Progress" row) and instantly re-completes the
+      // log that was just saved.
       // Refresh the active truck object state so the 5 PMS Health Summary Cards automatically recalculate
       await fetchTruck();
+      // Re-fetch maintenance records to instantly update the history table
+      await loadMaintenanceRecords();
       // Reset fields and close the modal after successful submission
       setLogDate(new Date().toISOString().split("T")[0]);
       setLogEndDate("");
@@ -891,7 +916,9 @@ function AdminTruckProfile() {
       setToast({
         message: shouldMarkAvailable
           ? "Maintenance service logged successfully — truck marked Available"
-          : "Maintenance service logged successfully",
+          : shouldMarkMaintenance
+            ? "Maintenance service logged successfully — truck marked under Maintenance"
+            : "Maintenance service logged successfully",
         type: "success",
       });
     } finally {

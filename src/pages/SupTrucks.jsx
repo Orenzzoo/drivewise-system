@@ -578,6 +578,19 @@ function SupTrucks() {
         });
       }
       if (!existing) {
+        // The edit payload no longer carries current_mileage (the modal's
+        // field is a read-only display of the live counter), so read it
+        // fresh from the DB -- this is the value the maintenance archives
+        // into Previous Mileage. The trucks update above doesn't touch it,
+        // so this read is the current stored counter.
+        const { data: freshTruck } = await supabase
+          .from("trucks")
+          .select("current_mileage")
+          .eq("id", truckToEdit.id)
+          .maybeSingle();
+        const mileageAtStart =
+          Number(freshTruck?.current_mileage ?? truckToEdit.current_mileage) ||
+          0;
         const { error: maintError } = await supabase
           .from("maintenance_records")
           .insert({
@@ -588,8 +601,8 @@ function SupTrucks() {
             // does not exist on this table (this insert used to fail because
             // of it), the record stores `current_mileage` + `mileage_at_service`
             // like the profile pages' own "Add Record" modal does.
-            current_mileage: Number(payload.current_mileage) || 0,
-            mileage_at_service: Number(payload.current_mileage) || 0,
+            current_mileage: mileageAtStart,
+            mileage_at_service: mileageAtStart,
             type: "Preventive Maintenance",
             shop: "In-House",
             notes: "",
@@ -609,10 +622,7 @@ function SupTrucks() {
           const { error: mileageError } = await supabase
             .from("trucks")
             .update(
-              maintenanceStartMileageUpdate(
-                payload.current_mileage,
-                todayISO(),
-              ),
+              maintenanceStartMileageUpdate(mileageAtStart, todayISO()),
             )
             .eq("id", truckToEdit.id);
           if (mileageError) {

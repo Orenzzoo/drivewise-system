@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import SupLayout from "../layout/SupLayout.jsx";
 import { DatePicker } from "../components/DateTimePicker.jsx";
@@ -572,6 +572,14 @@ function SupTruckProfile() {
         logStatus === "Completed" &&
         logMarkAvailable &&
         truck.status === "Maintenance";
+      // An "In Progress" log means the truck is now under active
+      // maintenance: the parent row must follow it into "Maintenance",
+      // otherwise the fleet keeps dispatching it as Available/Active while
+      // it is being serviced (and the Available-guarded auto-complete
+      // effect below would instantly re-complete the record just created).
+      // "Inactive" is never touched -- a truck deactivated for
+      // non-maintenance reasons must not be resurrected by a log entry.
+      const shouldMarkMaintenance = startsNow && truck.status !== "Inactive";
       const { error: updateError } = await supabase
         .from("trucks")
         .update({
@@ -583,6 +591,7 @@ function SupTruckProfile() {
             ? maintenanceStartMileageUpdate(archivedMileage, logDate)
             : { previous_maintenance_date: logDate }),
           ...(shouldMarkAvailable ? { status: "Available" } : {}),
+          ...(shouldMarkMaintenance ? { status: "Maintenance" } : {}),
         })
         .eq("id", truck.id);
 
@@ -594,13 +603,13 @@ function SupTruckProfile() {
         return;
       }
 
-      // Step C: Refresh State
-      // Optimistically add the new record to the UI, then re-fetch to ensure consistency
-      if (insertedData && insertedData.length) {
-        setMaintenanceRecords((prev) => [insertedData[0], ...prev]);
-      }
-      // Re-fetch maintenance records to ensure the list is fully up‑to‑date
-      await loadMaintenanceRecords();
+      // Step C: Refresh State -- truck FIRST, then records. Step B may have
+      // just moved the truck into "Maintenance" (or back to "Available");
+      // local state must reflect that before the refreshed record list
+      // (which now contains the new row) lands -- otherwise the
+      // Available-guarded auto-complete effect below observes a mixed state
+      // (old status + new "In Progress" row) and instantly re-completes the
+      // log that was just saved.
       // Refresh the truck data to reflect updated baseline fields (previous_maintenance_date, mileage, etc.)
       const { data: refreshedTruck, error: truckFetchError } = await supabase
         .from("trucks")
@@ -610,6 +619,12 @@ function SupTruckProfile() {
       if (!truckFetchError && refreshedTruck) {
         setTruck(refreshedTruck);
       }
+      // Optimistically add the new record to the UI, then re-fetch to ensure consistency
+      if (insertedData && insertedData.length) {
+        setMaintenanceRecords((prev) => [insertedData[0], ...prev]);
+      }
+      // Re-fetch maintenance records to ensure the list is fully up‑to‑date
+      await loadMaintenanceRecords();
       // Reset fields and close the modal after successful submission
       setLogDate(new Date().toISOString().split("T")[0]);
       setLogEndDate("");
@@ -624,7 +639,9 @@ function SupTruckProfile() {
       setToast({
         message: shouldMarkAvailable
           ? "Maintenance service logged successfully — truck marked Available"
-          : "Maintenance service logged successfully",
+          : shouldMarkMaintenance
+            ? "Maintenance service logged successfully — truck marked under Maintenance"
+            : "Maintenance service logged successfully",
         type: "success",
       });
     } finally {
@@ -825,9 +842,19 @@ function SupTruckProfile() {
   // Auto‑complete any "In Progress" maintenance record when the truck's status
   // transitions to "Available". This mirrors the admin view behavior and
   // ensures the Maintenance tab shows a Completed status.
+  // Transition-guarded: fires ONLY when the status actually changed INTO
+  // "Available" since the previous run -- never merely because the record
+  // list refreshed while the truck was already Available. Without this,
+  // logging a fresh "In Progress" record completed itself on the
+  // post-submit refresh (and overwrote its end_date with today), because
+  // the truck was still sitting at "Available" when the new row landed.
+  const prevTruckStatusRef = useRef(truck?.status);
   useEffect(() => {
     if (!truck) return;
+    const prevStatus = prevTruckStatusRef.current;
+    prevTruckStatusRef.current = truck.status;
     if (truck.status !== "Available") return;
+    if (prevStatus === "Available") return;
     const inProgress = maintenanceRecords.find(
       (r) => r.status === "In Progress",
     );
