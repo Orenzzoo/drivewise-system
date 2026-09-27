@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2, Lock } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff, Loader2, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient.js'
 import logoMark from '../layout/images/Logoo.png'
 
@@ -12,9 +12,9 @@ function ResetPassword() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [isCopied, setIsCopied] = useState(false)
   const hasSession = useRef(false)
 
   useEffect(() => {
@@ -86,18 +86,33 @@ function ResetPassword() {
   const trimmedPassword = password.trim()
   const trimmedConfirm = confirmPassword.trim()
   const passwordsMatch = trimmedPassword === trimmedConfirm
-  const isValid =
-    trimmedPassword.length >= MIN_PASSWORD_LENGTH && passwordsMatch
+
+  // Strength rules — every one of them is required before the form can be
+  // submitted, so a reset always lands on a strong password.
+  const strengthRules = [
+    { label: `At least ${MIN_PASSWORD_LENGTH} characters`, met: trimmedPassword.length >= MIN_PASSWORD_LENGTH },
+    { label: 'An uppercase letter', met: /[A-Z]/.test(trimmedPassword) },
+    { label: 'A lowercase letter', met: /[a-z]/.test(trimmedPassword) },
+    { label: 'A number', met: /[0-9]/.test(trimmedPassword) },
+    { label: 'A symbol (e.g. ! @ #)', met: /[^A-Za-z0-9]/.test(trimmedPassword) },
+  ]
+  const metCount = strengthRules.filter((rule) => rule.met).length
+  const strongEnough = metCount === strengthRules.length
+  const isValid = strongEnough && passwordsMatch
+  const strengthLabel = ['', 'Too weak', 'Weak', 'Fair', 'Good', 'Strong'][metCount]
+  const strengthBarClass =
+    metCount <= 2 ? 'bg-red-400' : metCount <= 4 ? 'bg-amber-400' : 'bg-emerald-500'
 
   const handleSubmit = async (event) => {
     event.preventDefault()
 
     if (!isValid) {
-      setErrorMessage(
-        !passwordsMatch
-          ? 'Passwords do not match.'
-          : `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
-      )
+      if (!passwordsMatch) {
+        setErrorMessage('Passwords do not match.')
+      } else {
+        const missing = strengthRules.filter((rule) => !rule.met).map((rule) => rule.label)
+        setErrorMessage(`Password still needs: ${missing.join(', ')}.`)
+      }
       return
     }
 
@@ -119,17 +134,6 @@ function ResetPassword() {
     // fresh with the new password.
     await supabase.auth.signOut()
     navigate('/', { replace: true })
-  }
-
-  const copyPassword = async () => {
-    try {
-      await navigator.clipboard.writeText(trimmedPassword)
-      setIsCopied(true)
-      window.setTimeout(() => setIsCopied(false), 2000)
-    } catch {
-      // Clipboard API can fail (permissions, insecure context) — the
-      // password stays selectable/visible either way.
-    }
   }
 
   return (
@@ -206,7 +210,7 @@ function ResetPassword() {
                     type={showPassword ? 'text' : 'password'}
                     name="newPassword"
                     autoComplete="new-password"
-                    placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                    placeholder="At least 8 chars with upper, lower, number & symbol"
                     value={password}
                     onChange={(event) => {
                       setPassword(event.target.value)
@@ -227,6 +231,41 @@ function ResetPassword() {
                     )}
                   </button>
                 </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="flex flex-1 gap-1.5" aria-hidden="true">
+                    {strengthRules.map((rule, index) => (
+                      <span
+                        key={rule.label}
+                        className={`h-1.5 flex-1 rounded-full transition ${
+                          index < metCount ? strengthBarClass : 'bg-slate-200'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span
+                    className={`w-16 text-right text-[11px] font-medium ${
+                      strongEnough ? 'text-emerald-600' : 'text-slate-400'
+                    }`}
+                  >
+                    {strengthLabel || 'Too weak'}
+                  </span>
+                </div>
+
+                <ul className="mt-1 space-y-1">
+                  {strengthRules.map((rule) => (
+                    <li key={rule.label} className="flex items-center gap-1.5 text-xs">
+                      {rule.met ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-emerald-600" aria-hidden="true" />
+                      ) : (
+                        <Circle className="h-3.5 w-3.5 flex-shrink-0 text-slate-300" aria-hidden="true" />
+                      )}
+                      <span className={rule.met ? 'text-slate-700' : 'text-slate-400'}>
+                        {rule.label}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               <div className="space-y-1.5">
@@ -243,7 +282,7 @@ function ResetPassword() {
                   />
                   <input
                     id="confirm-password"
-                    type={showPassword ? 'text' : 'password'}
+                    type={showConfirm ? 'text' : 'password'}
                     name="confirmPassword"
                     autoComplete="new-password"
                     placeholder="Re-enter the new password"
@@ -256,16 +295,14 @@ function ResetPassword() {
                   />
                   <button
                     type="button"
-                    onClick={copyPassword}
+                    onClick={() => setShowConfirm((current) => !current)}
+                    aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-ember-500"
-                    title="Copy password"
                   >
-                    {isCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                    {showConfirm ? (
+                      <EyeOff className="h-4 w-4" aria-hidden="true" />
                     ) : (
-                      <span className="block h-4 w-4 text-center text-[10px] font-bold leading-4">
-                        ⧉
-                      </span>
+                      <Eye className="h-4 w-4" aria-hidden="true" />
                     )}
                   </button>
                 </div>
