@@ -247,10 +247,10 @@ export const MIN_BUDGET_AMOUNT = 500;
 
 export function getBudgetError({ budgetMin, budgetMax }) {
   if (budgetMin !== "" && Number(budgetMin) < MIN_BUDGET_AMOUNT) {
-    return `Minimum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString()}.`;
+    return `Minimum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
   }
   if (budgetMax !== "" && Number(budgetMax) < MIN_BUDGET_AMOUNT) {
-    return `Maximum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString()}.`;
+    return `Maximum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
   }
   if (budgetMin === "" || budgetMax === "") return "";
   return Number(budgetMax) < Number(budgetMin)
