@@ -787,6 +787,36 @@ async function findAuthIdByContactEmail(
   return null;
 }
 
+// GoTrue's admin generate_link rejects a user_id-only body on this project
+// (HTTP 400 with an empty body), so a recovery link must be requested by the
+// account's email. users.login_email mirrors auth.users.email (it is the
+// address the user signs in with); when it is blank, read the canonical
+// address straight from the auth record instead.
+async function authEmailForUser(
+  // deno-lint-ignore no-explicit-any -- no Database generic exists in this
+  // codebase; see findAuthIdByContactEmail above.
+  adminClient: any,
+  userId: string,
+  loginEmail?: string | null,
+): Promise<string> {
+  if (loginEmail && loginEmail.trim()) {
+    return loginEmail.trim();
+  }
+  const { data, error } = await adminClient.auth.admin.getUserById(userId);
+  if (error || !data?.user?.email) return "";
+  return String(data.user.email).trim();
+}
+
+// supabase-js maps GoTrue's flat generate_link body into { properties };
+// the link itself lives at properties.action_link (older clients exposed
+// the same value as email_action_link).
+function recoveryActionLink(linkData: unknown): string | null {
+  const props = (linkData as { properties?: Record<string, unknown> } | null)
+    ?.properties;
+  const link = props?.action_link ?? props?.email_action_link;
+  return typeof link === "string" && link.length > 0 ? link : null;
+}
+
 type ProfileInput = {
   firstName: string;
   middleName?: string | null;
@@ -1184,13 +1214,15 @@ Deno.serve(async (req) => {
     if (authId) {
       let name = "";
       let roleName = "";
+      let loginEmail = "";
       try {
         const { data: userRow } = await adminClient
           .from("users")
-          .select("role")
+          .select("role, login_email")
           .eq("id", authId)
           .maybeSingle();
         roleName = userRow?.role ?? "";
+        loginEmail = userRow?.login_email ?? "";
         const table = roleName ? ROLE_TABLE[roleName] : undefined;
         if (table) {
           const { data: profile } = await adminClient
@@ -1211,19 +1243,25 @@ Deno.serve(async (req) => {
         roleName = "";
       }
 
-      const { data: linkData, error: linkError } =
-        await adminClient.auth.admin.generateLink({
-          type: "recovery",
-          userId: authId,
-          options: { redirectTo: `${loginPageUrl()}reset-password` },
-        });
+      // generateLink must be addressed by the auth email — a user_id-only
+      // body is rejected with a 400 by GoTrue on this project.
+      const authEmail = await authEmailForUser(adminClient, authId, loginEmail);
+      if (authEmail) {
+        const { data: linkData, error: linkError } =
+          await adminClient.auth.admin.generateLink({
+            type: "recovery",
+            email: authEmail,
+            options: { redirectTo: `${loginPageUrl()}reset-password` },
+          });
 
-      if (!linkError && linkData?.properties?.email_action_link) {
-        await sendRecoveryLinkEmail(
-          email,
-          linkData.properties.email_action_link as string,
-          { name, role: roleName },
-        ).catch(() => {});
+        const resetLink = recoveryActionLink(linkData);
+        if (!linkError && resetLink) {
+          await sendRecoveryLinkEmail(
+            email,
+            resetLink,
+            { name, role: roleName },
+          ).catch(() => {});
+        }
       }
     }
 
@@ -2904,23 +2942,34 @@ Deno.serve(async (req) => {
     // working until the user actually sets a new one through the link.
     // generateLink mints a single-use recovery link that lands on the
     // /reset-password page (FRONTEND_URL), where the user picks a new
-    // password. Falls back to returning the raw link when the email
-    // can't be delivered.
+    // password. GoTrue rejects a user_id-only body here, so the link is
+    // requested by the account's login email. Falls back to returning the
+    // raw link when the email can't be delivered.
+    const authEmail = await authEmailForUser(
+      adminClient,
+      userId,
+      userRow.login_email,
+    );
+
+    if (!authEmail) {
+      return json({ error: "No login email on file for this user" }, 400);
+    }
+
     const { data: linkData, error: linkError } =
       await adminClient.auth.admin.generateLink({
         type: "recovery",
-        userId,
+        email: authEmail,
         options: { redirectTo: `${loginPageUrl()}reset-password` },
       });
 
-    if (linkError || !linkData?.properties?.email_action_link) {
+    const resetLink = recoveryActionLink(linkData);
+
+    if (linkError || !resetLink) {
       return json(
         { error: linkError?.message || "Unable to generate reset link" },
         400,
       );
     }
-
-    const resetLink = linkData.properties.email_action_link as string;
 
     const emailResult = await sendRecoveryLinkEmail(contactEmail, resetLink, {
       name: resetName,
