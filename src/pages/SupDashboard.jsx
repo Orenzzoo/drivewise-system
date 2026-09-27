@@ -1753,15 +1753,19 @@ function DriverSafetyList({ data, isLoading }) {
 function RecentActivity({ items }) {
   return (
     <Panel title="Recent Activity" muted>
-      <ul className="flex flex-col gap-2">
-        {items.map((item) => (
-          <li key={item.id} className="flex items-start gap-2 text-xs">
-            <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${TONE[item.tone].dot}`} />
-            <span className="flex-1 text-slate-600">{item.text}</span>
-            <span className="shrink-0 text-[10.5px] text-slate-400">{item.time}</span>
-          </li>
-        ))}
-      </ul>
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-400">No recent activity.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-start gap-2 text-xs">
+              <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${TONE[item.tone].dot}`} />
+              <span className="flex-1 text-slate-600">{item.text}</span>
+              <span className="shrink-0 text-[10.5px] text-slate-400">{item.time}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Panel>
   );
 }
@@ -1949,7 +1953,18 @@ function SupDashboard() {
             tone: "slate",
           };
         }
-        return null;
+        // Every other status (OUT_FOR_PICKUP, ARRIVED_PICKUP,
+        // OUT_FOR_DROPOFF, ARRIVED_DROPOFF, QUOTATION_SUBMITTED, etc.) still
+        // gets a generic entry instead of silently vanishing from the feed --
+        // previously only 5 of the app's many statuses produced an event at
+        // all, so a top-15 fetch dominated by the others could render an
+        // empty panel with no explanation.
+        return {
+          id: `req-${r.id}-status`,
+          text: `${clientName}'s delivery updated to ${r.status.replaceAll("_", " ").toLowerCase()}`,
+          at: r.updated_at,
+          tone: "slate",
+        };
       })
       .filter(Boolean);
 
@@ -1968,9 +1983,16 @@ function SupDashboard() {
     return [...requestEvents, ...maintenanceEvents]
       .filter((e) => e.at)
       .sort((a, b) => new Date(b.at) - new Date(a.at))
-      .slice(0, 5)
-      .map((e) => ({ ...e, time: formatRelativeTime(e.at, now) }));
-  }, [recentRequests, maintenanceLog, trucks, clientNameById, driverNameById, now]);
+      .slice(0, 5);
+  }, [recentRequests, maintenanceLog, trucks, clientNameById, driverNameById]);
+
+  // Split from the useMemo above so a live clock tick only redoes this cheap
+  // label-formatting pass, not the filter/map/sort/slice over every request
+  // and maintenance log row.
+  const recentActivityWithTime = recentActivity.map((e) => ({
+    ...e,
+    time: formatRelativeTime(e.at, now),
+  }));
 
   // Real per-driver alert data only (mock rollup removed, explicit user
   // request) -- date-range filtering of `realDriverSafety` itself is out of
@@ -2034,7 +2056,7 @@ function SupDashboard() {
         <SectionHeader muted>Recent Activity &amp; Performance</SectionHeader>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
           <div className="lg:col-span-7">
-            <RecentActivity items={recentActivity} />
+            <RecentActivity items={recentActivityWithTime} />
           </div>
           <div className="lg:col-span-5">
             <WeeklySafetySummary

@@ -6,6 +6,7 @@ import {
   formatManilaTimestamp,
   getManilaHour,
   MANILA_TIMEZONE,
+  manilaTodayISO,
 } from "../lib/manilaTime.js";
 import { formatWorkingDays } from "../lib/workingDays.js";
 import {
@@ -592,26 +593,52 @@ function SupCrewProfile() {
 
       // A helper can legitimately have more than one CREW_ACTIVE_STATUSES row
       // at once (e.g. a stale ASSIGNED trip that was never started or
-      // cancelled, sitting alongside today's real one) -- found 2026-09-26,
-      // this query's own `.limit(1)` had no `.order()`, so it surfaced
-      // whichever row Postgres happened to return first rather than the
-      // actually-current one. Newest `pickup_date` first (ties broken by
-      // `assigned_at`) so the trip that's happening now/soonest wins over an
-      // old stuck one.
+      // cancelled, sitting alongside today's real one, or a later trip
+      // pre-assigned ahead of time) -- found 2026-09-26, this query's own
+      // `.limit(1)` had no `.order()`, so it surfaced whichever row Postgres
+      // happened to return first rather than the actually-current one.
+      // Picked in JS below (not via `.order()+.limit(1)`) because "current"
+      // means closest to today, not simply newest/oldest `pickup_date` --
+      // a plain descending sort would hand this to a future pre-assigned
+      // trip instead of today's real one.
       const { data: trips, error } = await supabase
         .from("delivery_requests")
-        .select("id, assigned_driver_id")
+        .select("id, assigned_driver_id, pickup_date, assigned_at")
         .contains("assigned_helper_ids", [crew.employeeId])
-        .in("status", CREW_ACTIVE_STATUSES)
-        .order("pickup_date", { ascending: false })
-        .order("assigned_at", { ascending: false })
-        .limit(1);
+        .in("status", CREW_ACTIVE_STATUSES);
 
       if (!isMounted || error) {
         return;
       }
 
-      const trip = (trips || [])[0];
+      // Today's Manila date (or the future date closest to it) wins over
+      // both a stale past trip and a later pre-assigned one; among same-date
+      // rows, the more recently assigned wins, with a null `assigned_at`
+      // (never explicitly (re)assigned) always losing the tiebreak rather
+      // than sorting first/last unpredictably.
+      const today = manilaTodayISO();
+      const best = (trips || []).reduce((current, candidate) => {
+        if (!current) return candidate;
+        const currentIsFuture = current.pickup_date >= today;
+        const candidateIsFuture = candidate.pickup_date >= today;
+        if (currentIsFuture !== candidateIsFuture) {
+          return candidateIsFuture ? candidate : current;
+        }
+        if (candidate.pickup_date !== current.pickup_date) {
+          return candidateIsFuture
+            ? candidate.pickup_date < current.pickup_date
+              ? candidate
+              : current
+            : candidate.pickup_date > current.pickup_date
+              ? candidate
+              : current;
+        }
+        const currentAssignedAt = current.assigned_at || "";
+        const candidateAssignedAt = candidate.assigned_at || "";
+        return candidateAssignedAt > currentAssignedAt ? candidate : current;
+      }, null);
+
+      const trip = best;
       if (!trip?.assigned_driver_id) {
         setTeamAssignment(null);
         return;

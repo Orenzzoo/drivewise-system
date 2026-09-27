@@ -9518,7 +9518,7 @@ function SupDeliveries() {
                       <span className="text-center">Status</span>
                       <span className="text-center">Request ID</span>
                       <span className="text-left">Customer</span>
-                      <span className="text-left">Pick-up</span>
+                      <span className="text-left">Route</span>
                       <span className="text-left">Crew</span>
                       <span></span>
                     </div>
@@ -9550,12 +9550,22 @@ function SupDeliveries() {
                           <p className="text-sm font-semibold text-slate-900 text-center">
                             {delivery.id}
                           </p>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {delivery.customerName}
-                          </p>
-                          <p className="text-sm text-slate-700 line-clamp-2">
-                            <ResolvedText value={delivery.pickupAddress} />
-                          </p>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {delivery.customerName}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {delivery.companyName}
+                            </p>
+                          </div>
+                          <div className="text-sm text-slate-700">
+                            <p className="line-clamp-1">
+                              <ResolvedText value={delivery.pickupAddress} />
+                            </p>
+                            <p className="line-clamp-1 text-xs text-slate-500">
+                              → <ResolvedText value={delivery.deliveryAddress} />
+                            </p>
+                          </div>
                           <div className="min-w-0 text-xs text-slate-500">
                             {delivery.crew?.truck && (
                               <p className="flex items-center gap-1 truncate">

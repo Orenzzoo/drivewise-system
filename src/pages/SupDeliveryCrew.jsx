@@ -299,6 +299,18 @@ function SupDeliveryCrew() {
   // Crew list view: "all" | "week" (free this week) | "helper-driver".
   const [viewMode, setViewMode] = useState("all");
 
+  // `selectedStatus` compares against `statusKeyForView(crew, viewMode)`,
+  // whose meaning flips between today-scoped (crew.status) and week-scoped
+  // (crew.weekStatus) depending on the active tab -- carrying a status
+  // filter across a tab switch would silently reinterpret it against the
+  // other status system. Reset at every `setViewMode` call site (below)
+  // rather than in an effect (the codebase's react-hooks/set-state-in-effect
+  // rule disallows a synchronous setState directly in an effect body).
+  const changeViewMode = (mode) => {
+    setSelectedStatus("All");
+    setViewMode(mode);
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -732,7 +744,7 @@ function SupDeliveryCrew() {
               <button
                 key={tile.label}
                 type="button"
-                onClick={() => setViewMode(isActive ? "all" : (tile.mode || viewMode))}
+                onClick={() => changeViewMode(isActive ? "all" : (tile.mode || viewMode))}
                 className={`flex items-center gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm transition ${
                   isActive ? "border-sky-400 ring-2 ring-sky-200" : "border-slate-200 hover:border-slate-300"
                 } ${tile.mode ? "cursor-pointer" : "cursor-default"}`}
@@ -762,7 +774,7 @@ function SupDeliveryCrew() {
               key={tab.mode}
               type="button"
               onClick={() => {
-                setViewMode(tab.mode);
+                changeViewMode(tab.mode);
                 setCurrentPage(1);
               }}
               className={`whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-semibold transition ${
