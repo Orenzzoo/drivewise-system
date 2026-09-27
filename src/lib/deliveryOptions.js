@@ -99,11 +99,14 @@ const LEGACY_ITEM_TYPE_LABELS = {
 // back to converting underscores to spaces and capitalizing.
 export function normalizeTruckTypeName(value) {
   if (!value) return "";
-  const match = truckTypes.find((t) => t.value === value);
+  const normalized = String(value).replace(/_/g, " ");
+  const match = truckTypes.find(
+    (t) => t.value === value || t.value === normalized,
+  );
   if (match) return match.label;
-  return String(value)
-    .replace(/[_]/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  // Legacy "L300" maps to "LUV"
+  if (normalized === "L300") return "LUV";
+  return normalized.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function normalizeItemTypeName(value) {
