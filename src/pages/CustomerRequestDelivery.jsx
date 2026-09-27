@@ -1406,8 +1406,9 @@ function CustomerRequestDelivery() {
 
   const handleBudgetBlur = (e) => {
     const { name, value } = e.target;
-    const [whole, decimals] = value.split(".");
-    let formatted = value;
+    const v = sanitizeBudgetInput(value);
+    const [whole, decimals] = v.split(".");
+    let formatted = v;
     if (decimals === undefined) formatted = `${whole}.00`;
     else if (decimals.length < 2) formatted = `${whole}.${decimals.padEnd(2, "0")}`;
     setFormData(prev => ({ ...prev, [name]: formatted }));

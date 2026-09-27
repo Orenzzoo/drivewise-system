@@ -2819,18 +2819,18 @@ function RequestDetailView({
                                            ),
                                          }))
                                        }
-                                       onBlur={(e) => {
-                                         const v = e.target.value;
-                                         const [w, d] = v.split(".");
-                                         setPriceRange((prev) => ({
-                                           ...prev,
-                                           min: !d
-                                             ? `${w}.00`
-                                             : d.length < 2
-                                               ? `${w}.${d.padEnd(2, "0")}`
-                                               : v,
-                                         }));
-                                       }}
+                                        onBlur={(e) => {
+                                          const v = sanitizeCurrencyInput(e.target.value);
+                                          const [w, d] = v.split(".");
+                                          setPriceRange((prev) => ({
+                                            ...prev,
+                                            min: !d
+                                              ? `${w}.00`
+                                              : d.length < 2
+                                                ? `${w}.${d.padEnd(2, "0")}`
+                                                : v,
+                                          }));
+                                        }}
                                        placeholder="0"
                                        className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-sm"
                                      />
@@ -2861,18 +2861,18 @@ function RequestDetailView({
                                            ),
                                          }))
                                        }
-                                       onBlur={(e) => {
-                                         const v = e.target.value;
-                                         const [w, d] = v.split(".");
-                                         setPriceRange((prev) => ({
-                                           ...prev,
-                                           max: !d
-                                             ? `${w}.00`
-                                             : d.length < 2
-                                               ? `${w}.${d.padEnd(2, "0")}`
-                                               : v,
-                                         }));
-                                       }}
+                                        onBlur={(e) => {
+                                          const v = sanitizeCurrencyInput(e.target.value);
+                                          const [w, d] = v.split(".");
+                                          setPriceRange((prev) => ({
+                                            ...prev,
+                                            max: !d
+                                              ? `${w}.00`
+                                              : d.length < 2
+                                                ? `${w}.${d.padEnd(2, "0")}`
+                                                : v,
+                                          }));
+                                        }}
                                        placeholder="0"
                                        className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-sm"
                                      />
@@ -3183,18 +3183,18 @@ function RequestDetailView({
                                  min: sanitizeCurrencyInput(e.target.value),
                                }))
                              }
-                             onBlur={(e) => {
-                               const v = e.target.value;
-                               const [w, d] = v.split(".");
-                               setPriceRange((prev) => ({
-                                 ...prev,
-                                 min: !d
-                                   ? `${w}.00`
-                                   : d.length < 2
-                                     ? `${w}.${d.padEnd(2, "0")}`
-                                     : v,
-                               }));
-                             }}
+                              onBlur={(e) => {
+                                const v = sanitizeCurrencyInput(e.target.value);
+                                const [w, d] = v.split(".");
+                                setPriceRange((prev) => ({
+                                  ...prev,
+                                  min: !d
+                                    ? `${w}.00`
+                                    : d.length < 2
+                                      ? `${w}.${d.padEnd(2, "0")}`
+                                      : v,
+                                }));
+                              }}
                              placeholder="0"
                              className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-xs md:pl-8 md:pr-4 md:py-2.5 md:text-sm"
                            />
@@ -3221,18 +3221,18 @@ function RequestDetailView({
                                  max: sanitizeCurrencyInput(e.target.value),
                                }))
                              }
-                             onBlur={(e) => {
-                               const v = e.target.value;
-                               const [w, d] = v.split(".");
-                               setPriceRange((prev) => ({
-                                 ...prev,
-                                 max: !d
-                                   ? `${w}.00`
-                                   : d.length < 2
-                                     ? `${w}.${d.padEnd(2, "0")}`
-                                     : v,
-                               }));
-                             }}
+                              onBlur={(e) => {
+                                const v = sanitizeCurrencyInput(e.target.value);
+                                const [w, d] = v.split(".");
+                                setPriceRange((prev) => ({
+                                  ...prev,
+                                  max: !d
+                                    ? `${w}.00`
+                                    : d.length < 2
+                                      ? `${w}.${d.padEnd(2, "0")}`
+                                      : v,
+                                }));
+                              }}
                              placeholder="0"
                              className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-xs md:pl-8 md:pr-4 md:py-2.5 md:text-sm"
                            />
