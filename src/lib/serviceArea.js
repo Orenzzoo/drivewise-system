@@ -194,7 +194,19 @@ const POLILLO = [
   [14.946, 121.8184], [15.0122, 121.8264], [15.0454, 121.8442], [15.0246, 121.8937],
   [15.0522, 121.928], [15.0429, 121.9938], [15.0272, 122.0112], [15.0107, 122.0054]
 ]
-export const LUZON_SERVICE_AREA = [LUZON_MAINLAND, MINDORO, MARINDUQUE, CATANDUANES, POLILLO]
+// Manila harbor supplement: the Port Area reclamation and the South/North
+// Harbor piers postdate the Natural Earth coastline, so that waterfront
+// (ferry terminals, barangay shoreline) falls outside the traced ring. The
+// east edge sits inside the NE ring so the two areas union seamlessly, and
+// the west edge stops at the pier tips so open Manila Bay stays excluded.
+const MANILA_HARBOR = [
+  [14.573, 120.976], [14.573, 120.961], [14.578, 120.950],
+  [14.585, 120.947], [14.596, 120.947], [14.600, 120.946],
+  [14.617, 120.945], [14.622, 120.950], [14.628, 120.960],
+  [14.626, 120.975],
+]
+
+export const LUZON_SERVICE_AREA = [LUZON_MAINLAND, MINDORO, MARINDUQUE, CATANDUANES, POLILLO, MANILA_HARBOR]
 
 export const SERVICE_AREA_MESSAGE =
   'This location is outside our service area. Please select a location within Luzon.'
