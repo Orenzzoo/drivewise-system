@@ -2396,7 +2396,7 @@ function CustomerRequestDelivery() {
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
                 Enter your preferred budget range (minimum ₱
-                {MIN_BUDGET_AMOUNT.toLocaleString()}). The final quotation
+                {MIN_BUDGET_AMOUNT.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}). The final quotation
                 will be discussed with the supervisor.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">

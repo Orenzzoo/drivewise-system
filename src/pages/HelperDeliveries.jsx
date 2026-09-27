@@ -1063,7 +1063,7 @@ function DeliveryDetailView({
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                   <p className="text-xs font-medium text-emerald-800">
-                    PHP {Number(delivery.quotation.amount).toLocaleString()}
+                    PHP {Number(delivery.quotation.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
                 {delivery.quotation.breakdown?.length > 0 && (
@@ -1075,14 +1075,14 @@ function DeliveryDetailView({
                       <div key={idx} className="flex justify-between text-xs">
                         <span className="text-slate-600">{item.label}</span>
                         <span className="font-medium text-slate-800">
-                          ₱{Number(item.amount).toLocaleString()}
+                          ₱{Number(item.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     ))}
                     <div className="flex justify-between border-t border-teal-300 pt-1.5 text-xs font-bold">
                       <span className="text-slate-800">Total</span>
                       <span className="text-slate-800">
-                        ₱{Number(delivery.quotation.amount).toLocaleString()}
+                        ₱{Number(delivery.quotation.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -2108,7 +2108,7 @@ function HelperDeliveries() {
                           </div>
                           <p className="truncate text-xs font-bold text-teal-900">
                             {workspaceDelivery.quotation
-                              ? `₱${Number(workspaceDelivery.quotation.amount).toLocaleString()}`
+                              ? `₱${Number(workspaceDelivery.quotation.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                               : ""}
                           </p>
                         </div>

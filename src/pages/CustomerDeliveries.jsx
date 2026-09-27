@@ -636,7 +636,7 @@ function buildCustomerTimeline(request) {
     if (request.priceRange) {
       // Customer-only extra: the exact range they asked for.
       processingSubsteps.push({
-        label: `You Requested ₱${Number(request.priceRange.min).toLocaleString()}–₱${Number(request.priceRange.max).toLocaleString()}`,
+        label: `You Requested ₱${Number(request.priceRange.min).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}–₱${Number(request.priceRange.max).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         detail: `· ${formatTimestamp(request.quotationRespondedAt) || registeredAt}`,
       });
     }
@@ -830,7 +830,7 @@ function fmPeso(v) {
     typeof v === "number"
       ? v
       : parseFloat(String(v ?? "").replace(/[^0-9.-]/g, ""));
-  return `₱${(Number.isNaN(num) ? 0 : num).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+  return `₱${(Number.isNaN(num) ? 0 : num).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function BreakdownLine({ label, value, indent = false }) {
@@ -2044,7 +2044,7 @@ function RequestDetailView({
                   </p>
                   <p className="font-medium text-slate-900">
                     {request.budgetMin
-                      ? `₱${Number(request.budgetMin).toLocaleString()}`
+                      ? `₱${Number(request.budgetMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : ""}
                   </p>
                 </div>
@@ -2054,7 +2054,7 @@ function RequestDetailView({
                   </p>
                   <p className="font-medium text-slate-900">
                     {request.budgetMax
-                      ? `₱${Number(request.budgetMax).toLocaleString()}`
+                      ? `₱${Number(request.budgetMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : ""}
                   </p>
                 </div>
@@ -2187,13 +2187,13 @@ function RequestDetailView({
                         typeof request.previousQuotation === "object"
                           ? request.previousQuotation.amount
                           : request.previousQuotation,
-                      ).toLocaleString()}
+                      ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                     {request.priceRange && (
                       <p className="mt-1 text-[10px] text-slate-500 md:text-xs">
                         You requested ₱
-                        {Number(request.priceRange.min).toLocaleString()}–₱
-                        {Number(request.priceRange.max).toLocaleString()}{" "}
+                        {Number(request.priceRange.min).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}–₱
+                        {Number(request.priceRange.max).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
                         instead
                       </p>
                     )}
@@ -2226,7 +2226,7 @@ function RequestDetailView({
                     {quotationAmount ? (
                       <>
                         <p className="mt-1 text-sm font-bold text-slate-900 md:text-base">
-                          ₱{Number(quotationAmount).toLocaleString()}
+                          ₱{Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <ExpandableBreakdown
                           quotation={request.quotation}
@@ -2250,7 +2250,7 @@ function RequestDetailView({
                   Quotation
                 </h3>
                 <p className="mt-1.5 text-base font-bold text-emerald-700 md:mt-2 md:text-lg">
-                  ₱{Number(quotationAmount).toLocaleString()}
+                  ₱{Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 {request.quotationApproved && (
                   <p className="mt-1 text-[10px] font-medium text-emerald-600 md:text-xs">
@@ -2436,8 +2436,8 @@ function RequestDetailView({
                           Price Range Bid
                         </span>
                         <span className="text-sm font-bold text-blue-700">
-                          ₱{Number(request.budgetMin).toLocaleString()} – ₱
-                          {Number(request.budgetMax).toLocaleString()}
+                          ₱{Number(request.budgetMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱
+                          {Number(request.budgetMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -2508,7 +2508,7 @@ function RequestDetailView({
                       label="Price Range Bid"
                       value={
                         request.budgetMin && request.budgetMax
-                          ? `₱${Number(request.budgetMin).toLocaleString()} – ₱${Number(request.budgetMax).toLocaleString()}`
+                          ? `₱${Number(request.budgetMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱${Number(request.budgetMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : ""
                       }
                     />
@@ -2548,7 +2548,7 @@ function RequestDetailView({
                             Approved Amount
                           </p>
                           <p className="text-2xl font-bold text-emerald-800">
-                            ₱{Number(quotationAmount).toLocaleString()}
+                            ₱{Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                         </div>
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -2589,16 +2589,16 @@ function RequestDetailView({
                               typeof request.previousQuotation === "object"
                                 ? request.previousQuotation.amount
                                 : request.previousQuotation,
-                            ).toLocaleString()}
+                            ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                           {request.priceRange && (
                             <p className="text-sm text-slate-500">
                               You requested ₱
-                              {Number(request.priceRange.min).toLocaleString()}
+                              {Number(request.priceRange.min).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               –₱
                               {Number(
                                 request.priceRange.max,
-                              ).toLocaleString()}{" "}
+                              ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
                               instead
                             </p>
                           )}
@@ -2633,7 +2633,7 @@ function RequestDetailView({
                         </div>
                       )}
                       <p className="text-lg font-bold text-slate-900">
-                        ₱{Number(quotationAmount).toLocaleString()}
+                        ₱{Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                       <ExpandableBreakdown
                         quotation={request.quotation}
@@ -2706,7 +2706,7 @@ function RequestDetailView({
                               <p className="text-sm text-slate-700">
                                 Approve{" "}
                                 <span className="font-bold">
-                                  ₱{Number(quotationAmount).toLocaleString()}
+                                  ₱{Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                                 ? The delivery moves to For Pickup.
                               </p>
@@ -2890,13 +2890,13 @@ function RequestDetailView({
                               typeof request.previousQuotation === "object"
                                 ? request.previousQuotation.amount
                                 : request.previousQuotation,
-                            ).toLocaleString()}{" "}
+                            ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
                             quotation.
                           </p>
                         )}
                         <p className="mt-2 text-sm text-amber-800">
-                          ₱{Number(request.priceRange.min).toLocaleString()} – ₱
-                          {Number(request.priceRange.max).toLocaleString()}
+                          ₱{Number(request.priceRange.min).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱
+                          {Number(request.priceRange.max).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <p className="mt-1 text-xs text-amber-600">
                           Awaiting supervisor's revised quotation...
@@ -2997,13 +2997,13 @@ function RequestDetailView({
                   {request.previousQuotation && request.priceRange && (
                     <p className="mt-1 text-[10px] text-blue-600 md:text-xs">
                       Revised after you requested ₱
-                      {Number(request.priceRange.min).toLocaleString()}–₱
-                      {Number(request.priceRange.max).toLocaleString()}
+                      {Number(request.priceRange.min).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}–₱
+                      {Number(request.priceRange.max).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   )}
                   <div className="mt-2 rounded-xl border border-blue-200 bg-white p-2.5 md:mt-3 md:p-3">
                     <p className="text-xl font-bold text-blue-600 md:text-2xl">
-                      ₱{Number(quotationAmount).toLocaleString()}
+                      ₱{Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                     <ExpandableBreakdown quotation={request.quotation} />
                   </div>
@@ -3059,7 +3059,7 @@ function RequestDetailView({
                     <p className="text-xs text-slate-600 md:text-sm">
                       Approve{" "}
                       <span className="font-bold">
-                        ₱{Number(quotationAmount).toLocaleString()}
+                        ₱{Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                       ? The delivery moves to For Pickup.
                     </p>
@@ -3219,14 +3219,14 @@ function RequestDetailView({
                         typeof request.previousQuotation === "object"
                           ? request.previousQuotation.amount
                           : request.previousQuotation,
-                      ).toLocaleString()}{" "}
+                      ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
                       quotation.
                     </p>
                   )}
                   <p className="mt-1.5 text-xs text-amber-800 md:mt-2 md:text-sm">
-                    &#x20B1;{Number(request.priceRange.min).toLocaleString()}{" "}
+                    &#x20B1;{Number(request.priceRange.min).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
                     &ndash; &#x20B1;
-                    {Number(request.priceRange.max).toLocaleString()}
+                    {Number(request.priceRange.max).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                   <p className="mt-1 text-[10px] text-amber-600 md:text-xs">
                     Awaiting supervisor's revised quotation...
@@ -3508,24 +3508,24 @@ function RequestCard({ request, onViewDetails, onConfirmReceived }) {
   let quotationInfo = null;
   if (quotationAmount && request.quotationApproved) {
     quotationInfo = {
-      text: `Quotation: ₱${Number(quotationAmount).toLocaleString()}`,
+      text: `Quotation: ₱${Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       tone: "text-emerald-600",
     };
   } else if (quotationAmount) {
     // Covers both a fresh quotation and a revised one sent after an earlier
     // round was rejected — either way there's a live quotation to act on.
     quotationInfo = {
-      text: `Quotation: ₱${Number(quotationAmount).toLocaleString()}${needsAction ? " — action needed" : ""}`,
+      text: `Quotation: ₱${Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${needsAction ? " — action needed" : ""}`,
       tone: needsAction ? "text-red-600" : "text-blue-600",
     };
   } else if (request.quotationRejected && request.priceRange) {
     quotationInfo = {
-      text: `Requested range: ₱${Number(request.priceRange.min).toLocaleString()}–₱${Number(request.priceRange.max).toLocaleString()}`,
+      text: `Requested range: ₱${Number(request.priceRange.min).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}–₱${Number(request.priceRange.max).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       tone: "text-amber-600",
     };
   } else if (request.budgetMin && request.budgetMax) {
     quotationInfo = {
-      text: `Budget: ₱${Number(request.budgetMin).toLocaleString()}–₱${Number(request.budgetMax).toLocaleString()}`,
+      text: `Budget: ₱${Number(request.budgetMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}–₱${Number(request.budgetMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       tone: "text-slate-500",
     };
   }
