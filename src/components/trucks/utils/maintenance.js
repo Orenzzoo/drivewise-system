@@ -21,14 +21,24 @@ export function getLatestMaintenance(maintenanceRecords) {
 
 /**
  * Determine the status to display on the Maintenance Status card.
- * Preference is given to the status of the latest maintenance record.
- * If no record exists, fall back to the PMS calculation based on the
- * truck's mileage and dates.
+ * An open ("In Progress") record means the truck is currently being
+ * serviced, so it wins over the newest-first rule -- otherwise a newer
+ * Completed log (paperwork for a different service, or a same-start_date
+ * ordering tie) buries the still-open maintenance and the card wrongly
+ * reads "Completed". Falls back to the newest record's status, then "N/A".
  */
 export function getMaintenanceCardStatus(truck, maintenanceRecords) {
-  const latest = getLatestMaintenance(maintenanceRecords);
-  if (latest && latest.status) {
-    return latest.status;
+  if (Array.isArray(maintenanceRecords) && maintenanceRecords.length > 0) {
+    const inProgress = maintenanceRecords.find(
+      (r) => r.status === "In Progress",
+    );
+    if (inProgress) {
+      return "In Progress";
+    }
+    const latest = getLatestMaintenance(maintenanceRecords);
+    if (latest && latest.status) {
+      return latest.status;
+    }
   }
   // If there is no maintenance record, display "N/A" as the fallback.
   return "N/A";
