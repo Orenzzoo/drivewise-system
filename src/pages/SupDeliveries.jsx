@@ -67,11 +67,16 @@ import {
 import { REROUTE_REASON_LABELS } from "../lib/rerouteReasons.js";
 import {
   formatManilaTimestamp,
-  formatManilaDateTime,
   MANILA_TIMEZONE,
   getManilaFields,
   isManilaDatePast,
 } from "../lib/manilaTime.js";
+import {
+  formatIsoDateTime,
+  mapDbRequest,
+  mapFleetCrewMember,
+  mapFleetTruck,
+} from "../lib/deliveryRequestMapping.js";
 import {
   customer_deliveries,
   delivery_drivers,
@@ -265,14 +270,6 @@ function formatDateTime(dateStr, timeStr, timeEndStr) {
 }
 
 // Formats a full ISO timestamp (delivery_requests.created_at) into the same
-// "Aug 3, 2026, 11:02 PM" style used for pickup/drop-off dates. Pinned to
-// Asia/Manila (see lib/manilaTime.js) -- previously used the browser's own
-// local timezone via Date's local getters, correct only by coincidence on
-// dev machines already set to Manila time.
-function formatIsoDateTime(iso) {
-  return formatManilaDateTime(iso, { includeYear: true });
-}
-
 // What the customer actually asked for -- unlike getTruckType below, this
 // never falls back to the assigned truck's own type, so a mismatched
 // assignment (e.g. requested L300, assigned a 1T Dry Van truck) stays
@@ -4025,7 +4022,13 @@ function RerouteEventsSection({ rerouteEvents }) {
   );
 }
 
-function CompletedDeliveryReport({ delivery }) {
+// Exported for the Admin portal's read-only delivery details page
+// (AdminDeliveryDetails.jsx, route /admin/deliveries/:deliveryId) so an
+// Admin sees this exact report without entering the Supervisor portal
+// (ProtectedRoute bounces Admins off /supervisor/*, and SupLayout must
+// never render for them). Read-only -- the interactive quotation/
+// assignment workflow lives in the inbox modal, not here.
+export function CompletedDeliveryReport({ delivery }) {
   const [reportTab, setReportTab] = useState("details");
   // Real Trip Details / DriveWise Report data (2026-08-14), fetched per
   // delivery from sessions/alerts/gps_logs -- see buildRealTripAndBehaviorReport.
@@ -4215,7 +4218,8 @@ function CompletedDeliveryReport({ delivery }) {
   );
 }
 
-function CancelledDeliveryDetails({ delivery }) {
+// (Same Admin-sharing note as CompletedDeliveryReport above.)
+export function CancelledDeliveryDetails({ delivery }) {
   // Real delivery_requests rows carry the cancellation fields directly
   // (cancelledBy/cancelReason/cancelledAt) rather than the mock
   // `cancellation` envelope — prefer those when the envelope is absent.
@@ -4506,158 +4510,10 @@ function PaginationBar({ page, setPage, totalPages }) {
   );
 }
 
-// DB rows are snake_case; the inbox (and the detail view it feeds) expects the
-// camelCase shape used by the rest of this page, so each delivery_requests row
-// is mapped here. customer_records isn't client-readable (SUPABASE_GOTCHAS.md
-// #7), so the display name comes from the admin-users Edge Function's
-// list-clients action instead.
-// Map a real `trucks` row to the assignment picker shape. Real trucks have no
-// availability status or default-driver mapping (those only exist on the mock
-// fleet); `commodity_type` exists on real trucks too but is intentionally not
-// surfaced here — the Deliveries tab's Commodity Type label is computed from
-// the request's item_type (see getCommodityType), not the truck's. So only the
-// fields real data provides for the picker are kept.
-function mapFleetTruck(t) {
-  return {
-    id: t.id,
-    plateNumber: t.plate_number,
-    truckType: t.truck_type,
-    brand: t.brand,
-    model: t.model,
-    capacity:
-      t.max_capacity != null
-        ? `${Number(t.max_capacity).toLocaleString()} kg`
-        : null,
-    capacityKg: t.max_capacity,
-  };
-}
-
-// Map one `list-crew` member (Driver/Helper user merged with their *_records
-// row) to the assignment picker shape. `id` is the crew record id (D001/H001)
-// — what assignCrew persists as assigned_driver_id / assigned_helper_ids.
-function mapFleetCrewMember(m) {
-  return {
-    id: (m.record_id || "").trim(),
-    authId: m.id,
-    name: [m.first_name, m.middle_name, m.last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim(),
-    role: m.role,
-    // Client names (customer_records.client_name) this crew member
-    // specializes in, attached by list-crew via crew_client_specialties.
-    clientSpecialties: m.client_specialties || [],
-    // Self-set weekly working days (crew_availability) — feeds the
-    // Available/Unavailable badge in the assignment pickers.
-    workingDays: m.working_days || [],
-  };
-}
-
-// Rebuild the assigned crew (driver/helpers/truck) from the persisted
-// assignment columns using the real fleet loaded for the pickers.
-function buildAssignedCrew(row, fleet) {
-  if (!row.assigned_driver_id) return null;
-  return {
-    driver: fleet.drivers.find((d) => d.id === row.assigned_driver_id) || null,
-    helpers: (row.assigned_helper_ids || [])
-      .map((id) => fleet.helpers.find((h) => h.id === id))
-      .filter(Boolean),
-    truck: row.assigned_truck_plate
-      ? fleet.trucks.find((t) => t.plateNumber === row.assigned_truck_plate) ||
-        null
-      : null,
-  };
-}
-
-function mapDbRequest(row, clientName, fleet) {
-  const name = clientName || "Client";
-  return {
-    id: row.id,
-    customerAuthId: row.customer_auth_id,
-    customerName: name,
-    companyName: name,
-    itemType: row.item_type
-      ? row.item_type.charAt(0).toUpperCase() + row.item_type.slice(1)
-      : row.item_type,
-    otherItemType: row.other_item_type,
-    truckType: row.truck_type,
-    cargoWeight: row.cargo_weight,
-    pickupDate: row.pickup_date,
-    pickupTime: row.pickup_time,
-    pickupTimeEnd: row.pickup_time_end || null,
-    dropoffDate: row.dropoff_date,
-    dropoffTime: row.dropoff_time,
-    dropoffTimeEnd: row.dropoff_time_end || null,
-    pickupAddress: row.pickup_location,
-    pickupLat: row.pickup_lat,
-    pickupLng: row.pickup_lng,
-    deliveryAddress: row.dropoff_location,
-    dropoffLat: row.dropoff_lat,
-    dropoffLng: row.dropoff_lng,
-    // Reference-only intermediate stops between pickup/dropoff, customer-entered
-    // at booking time — read-only here (02B_MULTI_STOP_DELIVERIES.md).
-    stops: Array.isArray(row.stops) ? row.stops : [],
-    // Proof-photo state for the first two items in the chain (Pickup,
-    // Drop-off), written by the Helper's completion actions — read-only here
-    // (02C_ROUTE_STYLING_AND_PROOF_VISIBILITY.md).
-    pickupPhotoUrl: row.pickup_photo_url || null,
-    dropoffPhotoUrl: row.dropoff_photo_url || null,
-    // pickupCompletedAt/pickupArrivedAt/dropoffArrivedAt were all missing
-    // from this mapper (found 2026-09-09, live end-to-end test): Progress
-    // Timeline's "Pickup Confirmed" row always showed "—" with no
-    // timestamp, and Trip Details' per-location Arrival always showed "Not
-    // recorded for this trip" even on trips where the Driver genuinely
-    // tapped Arrived and the Helper genuinely confirmed Pickup — the real
-    // columns existed and were populated, buildRealTripAndBehaviorReport
-    // already read delivery.pickupCompletedAt/pickupArrivedAt/
-    // dropoffArrivedAt correctly, this mapper just never carried them
-    // through from the raw row in the first place.
-    pickupCompletedAt: row.pickup_completed_at || null,
-    dropoffCompletedAt: row.dropoff_completed_at || null,
-    pickupArrivedAt: row.pickup_arrived_at || null,
-    dropoffArrivedAt: row.dropoff_arrived_at || null,
-    // Frozen planned route (Pickup -> Drop-off -> Stops), if the Driver
-    // app's pre-trip screen already saved one — feeds the real Route
-    // Deviation Report (buildRealTripAndBehaviorReport, 11_ROUTE_COMPARISON.md).
-    // Deliberately null here (2026-09-09) -- the bulk list query no longer
-    // fetches suggested_route at all (perf fix, see loadInbox's query
-    // comment); this field is overwritten locally once loaded lazily, by
-    // whichever of the two loadSuggestedRoute effects applies to this row.
-    suggestedRoute: Array.isArray(row.suggested_route)
-      ? row.suggested_route
-      : null,
-    budgetMin: row.budget_min,
-    budgetMax: row.budget_max,
-    notes: row.notes,
-    status: row.status,
-    createdAt: row.created_at,
-    quotation: null,
-    updatedQuotation: null,
-    customerCounterMin: row.customer_counter_min,
-    customerCounterMax: row.customer_counter_max,
-    cancelledBy: row.cancelled_by,
-    cancelReason: row.cancel_reason,
-    cancelledAt: row.cancelled_at ? formatIsoDateTime(row.cancelled_at) : null,
-    cancelledFromStatus: row.cancelled_from_status,
-    // Customer confirmation state (written by the customer via
-    // CustomerDeliveries.jsx; the Completed module reads these).
-    receivedConfirmed: row.received_confirmed,
-    receivedConfirmedAt: row.received_confirmed_at
-      ? formatIsoDateTime(row.received_confirmed_at)
-      : null,
-    completedAt: row.completed_at ? formatIsoDateTime(row.completed_at) : null,
-    // Rebuild the assigned crew (same shape the assignment pickers produce)
-    // from the persisted columns so an assigned request still shows its
-    // driver/helpers/truck after a reload.
-    crew: row.assigned_driver_id
-      ? buildAssignedCrew(
-          row,
-          fleet || { drivers: [], helpers: [], trucks: [] },
-        )
-      : null,
-    assignedAt: row.assigned_at ? formatIsoDateTime(row.assigned_at) : null,
-  };
-}
+// DB row -> UI request-shape mapping (mapFleetTruck, mapFleetCrewMember,
+// mapDbRequest, formatIsoDateTime) lives in lib/deliveryRequestMapping.js,
+// shared with the Admin portal's read-only delivery details page
+// (AdminDeliveryDetails.jsx) so both portals map identically.
 
 // The customer's counter-offer range, read from the delivery_requests counter
 // columns (real data) with a fallback to the legacy single-amount mock shape.

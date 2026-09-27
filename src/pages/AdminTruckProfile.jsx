@@ -1,6 +1,6 @@
 import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
 import { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import AdminLayout from "../layout/AdminLayout.jsx";
 import { DatePicker } from "../components/DateTimePicker.jsx";
 import AddTruckModal from "../components/AddTruckModal.jsx";
@@ -356,6 +356,7 @@ function PaginationBar({ page, setPage, totalPages }) {
 
 function AdminTruckProfile() {
   const location = useLocation();
+  const navigate = useNavigate();
   // Seeded from nav state, then kept in sync with the DB below (fetchTruck)
   // so an edit updates what's shown here without a full page reload.
   const [truck, setTruck] = useState(location.state?.truck);
@@ -806,8 +807,14 @@ function AdminTruckProfile() {
     setTripStatusFilter(status);
     setTripPage(1);
   };
-  // Open the View modal for a specific trip
+  // Open the full delivery details page for a trip. The ViewModal below is
+  // kept only as the fallback for rows without a delivery id (real trips
+  // always have one -- they are delivery_requests rows).
   const openViewModal = (trip) => {
+    if (trip?.id) {
+      navigate(`/admin/deliveries/${trip.id}`);
+      return;
+    }
     setSelectedTrip(trip);
     setViewModalOpen(true);
   };
@@ -1224,7 +1231,8 @@ function AdminTruckProfile() {
                 totalPages={totalTripPages}
               />
             </section>
-            {/* View modal for delivery request details */}
+            {/* Fallback View modal for delivery request details -- only opens
+            when a row has no delivery id to navigate to (see openViewModal) */}
             <ViewModal
               isOpen={isViewModalOpen}
               onClose={closeViewModal}

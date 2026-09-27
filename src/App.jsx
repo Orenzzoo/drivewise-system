@@ -25,6 +25,9 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile.jsx"));
 const AdminTrucks = lazy(() => import("./pages/AdminTrucks.jsx"));
 const AdminTruckProfile = lazy(() => import("./pages/AdminTruckProfile.jsx"));
+const AdminDeliveryDetails = lazy(
+  () => import("./pages/AdminDeliveryDetails.jsx"),
+);
 const SupDeliveryCrew = lazy(() => import("./pages/SupDeliveryCrew.jsx"));
 const SupCrewProfile = lazy(() => import("./pages/SupCrewProfile.jsx"));
 const SupDeliveries = lazy(() => import("./pages/SupDeliveries.jsx"));
@@ -99,6 +102,10 @@ function App() {
           <Route path="/admin/profile" element={<AdminProfile />} />
           <Route path="/admin/trucks" element={<AdminTrucks />} />
           <Route path="/admin/trucks/profile" element={<AdminTruckProfile />} />
+          <Route
+            path="/admin/deliveries/:deliveryId"
+            element={<AdminDeliveryDetails />}
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
