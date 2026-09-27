@@ -86,11 +86,18 @@ const MAX_STOPS = 20;
 // columns on submit.
 const sanitizeBudgetInput = (raw) => {
   let value = String(raw).replace(/[^\d.]/g, "");
+  if (value === ".") return "0.00";
   const dot = value.indexOf(".");
   if (dot !== -1) {
     value = `${value.slice(0, dot + 1)}${value.slice(dot + 1).replace(/\./g, "")}`;
     const [whole, decimals] = value.split(".");
-    value = decimals === undefined ? whole : `${whole}.${decimals.slice(0, 2)}`;
+    if (decimals === undefined || decimals === "") {
+      value = `${whole}.00`;
+    } else {
+      value = `${whole}.${decimals.slice(0, 2).padEnd(2, "0")}`;
+    }
+  } else {
+    value = value === "" ? "" : `${value}.00`;
   }
   return value;
 };
@@ -99,7 +106,8 @@ const formatBudgetForDisplay = (raw) => {
   if (!raw) return "";
   const [whole, decimals] = raw.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return decimals === undefined ? grouped : `${grouped}.${decimals}`;
+  if (decimals === undefined) return `${grouped}.00`;
+  return `${grouped}.${decimals.padEnd(2, "0")}`;
 };
 
 // Map PostgREST error codes to friendly messages so the user sees

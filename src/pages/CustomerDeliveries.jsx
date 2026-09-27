@@ -117,11 +117,18 @@ function formatDisplayDateTime(dateStr, timeStr, timeEndStr) {
 // same cross-file convention as this repo's other duplicated formatters.
 const sanitizeCurrencyInput = (raw) => {
   let value = String(raw).replace(/[^\d.]/g, "");
+  if (value === ".") return "0.00";
   const dot = value.indexOf(".");
   if (dot !== -1) {
     value = `${value.slice(0, dot + 1)}${value.slice(dot + 1).replace(/\./g, "")}`;
     const [whole, decimals] = value.split(".");
-    value = decimals === undefined ? whole : `${whole}.${decimals.slice(0, 2)}`;
+    if (decimals === undefined || decimals === "") {
+      value = `${whole}.00`;
+    } else {
+      value = `${whole}.${decimals.slice(0, 2).padEnd(2, "0")}`;
+    }
+  } else {
+    value = value === "" ? "" : `${value}.00`;
   }
   return value;
 };
@@ -130,7 +137,8 @@ const formatCurrencyForDisplay = (raw) => {
   if (!raw) return "";
   const [whole, decimals] = raw.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return decimals === undefined ? grouped : `${grouped}.${decimals}`;
+  if (decimals === undefined) return `${grouped}.00`;
+  return `${grouped}.${decimals.padEnd(2, "0")}`;
 };
 
 // Whole calendar days between Manila-local "today" and a delivery's
