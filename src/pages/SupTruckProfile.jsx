@@ -709,12 +709,14 @@ function SupTruckProfile() {
 
           return {
             id: row.id,
-            dateLabel: new Date(row.created_at).toLocaleDateString("en-US", {
-              timeZone: MANILA_TIMEZONE,
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            }),
+            dateLabel: row.pickup_date
+              ? new Date(row.pickup_date).toLocaleDateString("en-US", {
+                  timeZone: MANILA_TIMEZONE,
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "N/A",
             client: row.pickup_location || "Unknown",
             route: "N/A",
             driver: driverName,
