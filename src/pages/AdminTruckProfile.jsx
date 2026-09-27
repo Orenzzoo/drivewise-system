@@ -536,19 +536,12 @@ function AdminTruckProfile() {
         setTrips([]);
       } else {
         // console.log("delivery_requests rows count", (data || []).length);
+        // No fallback fetch here: a truck with no assigned deliveries must
+        // show an empty list ("No trips match this filter"), never the
+        // unfiltered table -- a debugging fallback used to replace empty
+        // results with ALL deliveries, making every delivery-less truck
+        // display the identical full list.
         let rows = data || [];
-        // If filtered query returned no rows, attempt an unrestricted fetch for debugging.
-        if (rows.length === 0) {
-          const { data: allData, error: allError } = await supabase
-            .from("delivery_requests")
-            .select("*");
-          // console.log(
-          //   "unfiltered delivery_requests rows count",
-          //   (allData || []).length,
-          //   allError,
-          // );
-          if (!allError && allData) rows = allData;
-        }
         // Exclude delivery request statuses that should not appear in the truck view.
         const EXCLUDED_RAW_STATUSES = [
           "PENDING_REQUEST",
