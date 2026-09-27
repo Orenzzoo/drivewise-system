@@ -2244,18 +2244,19 @@ function CustomerRequestDelivery() {
                   >
                     Estimated Cargo Weight (kg)
                   </label>
-                  <input
-                    type="number"
-                    id="cargoWeight"
-                    name="cargoWeight"
-                    min="1"
-                    step="1"
-                    value={formData.cargoWeight}
-                    onChange={handleChange}
-                    placeholder="e.g. 800"
-                    required
-                    className="w-full rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  />
+                   <input
+                     type="text"
+                     inputMode="decimal"
+                     id="cargoWeight"
+                     name="cargoWeight"
+                     min="1"
+                     step="1"
+                     value={formData.cargoWeight}
+                     onChange={handleChange}
+                     placeholder="e.g. 800"
+                     required
+                     className="w-full rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                   />
                 </div>
               </div>
             </div>
