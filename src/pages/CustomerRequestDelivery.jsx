@@ -86,18 +86,12 @@ const MAX_STOPS = 20;
 // columns on submit.
 const sanitizeBudgetInput = (raw) => {
   let value = String(raw).replace(/[^\d.]/g, "");
-  if (value === ".") return "0.00";
+  if (value === ".") return "";
   const dot = value.indexOf(".");
   if (dot !== -1) {
     value = `${value.slice(0, dot + 1)}${value.slice(dot + 1).replace(/\./g, "")}`;
     const [whole, decimals] = value.split(".");
-    if (decimals === undefined || decimals === "") {
-      value = `${whole}.00`;
-    } else {
-      value = `${whole}.${decimals.slice(0, 2).padEnd(2, "0")}`;
-    }
-  } else {
-    value = value === "" ? "" : `${value}.00`;
+    value = decimals === undefined ? whole : `${whole}.${decimals.slice(0, 2)}`;
   }
   return value;
 };
@@ -106,8 +100,15 @@ const formatBudgetForDisplay = (raw) => {
   if (!raw) return "";
   const [whole, decimals] = raw.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  if (decimals === undefined) return `${grouped}.00`;
-  return `${grouped}.${decimals.padEnd(2, "0")}`;
+  return decimals === undefined ? grouped : `${grouped}.${decimals}`;
+};
+
+const addDecimalToBudget = (raw) => {
+  if (!raw) return "";
+  const [whole, decimals] = raw.split(".");
+  if (decimals === undefined) return `${whole}.00`;
+  if (decimals.length < 2) return `${whole}.${decimals.padEnd(2, "0")}`;
+  return `${whole}.${decimals.slice(0, 2)}`;
 };
 
 // Map PostgREST error codes to friendly messages so the user sees
@@ -1390,6 +1391,15 @@ function CustomerRequestDelivery() {
     setFormData(next);
   };
 
+  const handleBudgetBlur = (e) => {
+    const { name, value } = e.target;
+    const [whole, decimals] = value.split(".");
+    let formatted = value;
+    if (decimals === undefined) formatted = `${whole}.00`;
+    else if (decimals.length < 2) formatted = `${whole}.${decimals.padEnd(2, "0")}`;
+    setFormData(prev => ({ ...prev, [name]: formatted }));
+  };
+
   // No availability gate here -- any truck stays selectable regardless of
   // fit for the chosen item type/weight, same "recommended first, nothing
   // fully hidden" pattern SupDeliveries.jsx's assignment picker already
@@ -2429,6 +2439,7 @@ function CustomerRequestDelivery() {
                       name="budgetMin"
                       value={formatBudgetForDisplay(formData.budgetMin)}
                       onChange={handleChange}
+                      onBlur={handleBudgetBlur}
                       placeholder="e.g. 5,000"
                       className={`w-full rounded-xl border bg-white pl-8 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                         budgetError
@@ -2459,6 +2470,7 @@ function CustomerRequestDelivery() {
                       name="budgetMax"
                       value={formatBudgetForDisplay(formData.budgetMax)}
                       onChange={handleChange}
+                      onBlur={handleBudgetBlur}
                       placeholder="e.g. 10,000"
                       className={`w-full rounded-xl border bg-white pl-8 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                         budgetError

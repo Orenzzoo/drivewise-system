@@ -117,18 +117,12 @@ function formatDisplayDateTime(dateStr, timeStr, timeEndStr) {
 // same cross-file convention as this repo's other duplicated formatters.
 const sanitizeCurrencyInput = (raw) => {
   let value = String(raw).replace(/[^\d.]/g, "");
-  if (value === ".") return "0.00";
+  if (value === ".") return "";
   const dot = value.indexOf(".");
   if (dot !== -1) {
     value = `${value.slice(0, dot + 1)}${value.slice(dot + 1).replace(/\./g, "")}`;
     const [whole, decimals] = value.split(".");
-    if (decimals === undefined || decimals === "") {
-      value = `${whole}.00`;
-    } else {
-      value = `${whole}.${decimals.slice(0, 2).padEnd(2, "0")}`;
-    }
-  } else {
-    value = value === "" ? "" : `${value}.00`;
+    value = decimals === undefined ? whole : `${whole}.${decimals.slice(0, 2)}`;
   }
   return value;
 };
@@ -137,8 +131,15 @@ const formatCurrencyForDisplay = (raw) => {
   if (!raw) return "";
   const [whole, decimals] = raw.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  if (decimals === undefined) return `${grouped}.00`;
-  return `${grouped}.${decimals.padEnd(2, "0")}`;
+  return decimals === undefined ? grouped : `${grouped}.${decimals}`;
+};
+
+const addDecimalToCurrency = (raw) => {
+  if (!raw) return "";
+  const [whole, decimals] = raw.split(".");
+  if (decimals === undefined) return `${whole}.00`;
+  if (decimals.length < 2) return `${whole}.${decimals.padEnd(2, "0")}`;
+  return `${whole}.${decimals.slice(0, 2)}`;
 };
 
 // Whole calendar days between Manila-local "today" and a delivery's
@@ -2804,23 +2805,35 @@ function RequestDetailView({
                                     >
                                       ₱
                                     </span>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={formatCurrencyForDisplay(
-                                        priceRange.min,
-                                      )}
-                                      onChange={(e) =>
-                                        setPriceRange((prev) => ({
-                                          ...prev,
-                                          min: sanitizeCurrencyInput(
-                                            e.target.value,
-                                          ),
-                                        }))
-                                      }
-                                      placeholder="0"
-                                      className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-sm"
-                                    />
+                                   <input
+                                       type="text"
+                                       inputMode="decimal"
+                                       value={formatCurrencyForDisplay(
+                                         priceRange.min,
+                                       )}
+                                       onChange={(e) =>
+                                         setPriceRange((prev) => ({
+                                           ...prev,
+                                           min: sanitizeCurrencyInput(
+                                             e.target.value,
+                                           ),
+                                         }))
+                                       }
+                                       onBlur={(e) => {
+                                         const v = e.target.value;
+                                         const [w, d] = v.split(".");
+                                         setPriceRange((prev) => ({
+                                           ...prev,
+                                           min: !d
+                                             ? `${w}.00`
+                                             : d.length < 2
+                                               ? `${w}.${d.padEnd(2, "0")}`
+                                               : v,
+                                         }));
+                                       }}
+                                       placeholder="0"
+                                       className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-sm"
+                                     />
                                   </div>
                                 </div>
                                 <div>
@@ -2834,23 +2847,35 @@ function RequestDetailView({
                                     >
                                       ₱
                                     </span>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={formatCurrencyForDisplay(
-                                        priceRange.max,
-                                      )}
-                                      onChange={(e) =>
-                                        setPriceRange((prev) => ({
-                                          ...prev,
-                                          max: sanitizeCurrencyInput(
-                                            e.target.value,
-                                          ),
-                                        }))
-                                      }
-                                      placeholder="0"
-                                      className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-sm"
-                                    />
+                                     <input
+                                       type="text"
+                                       inputMode="decimal"
+                                       value={formatCurrencyForDisplay(
+                                         priceRange.max,
+                                       )}
+                                       onChange={(e) =>
+                                         setPriceRange((prev) => ({
+                                           ...prev,
+                                           max: sanitizeCurrencyInput(
+                                             e.target.value,
+                                           ),
+                                         }))
+                                       }
+                                       onBlur={(e) => {
+                                         const v = e.target.value;
+                                         const [w, d] = v.split(".");
+                                         setPriceRange((prev) => ({
+                                           ...prev,
+                                           max: !d
+                                             ? `${w}.00`
+                                             : d.length < 2
+                                               ? `${w}.${d.padEnd(2, "0")}`
+                                               : v,
+                                         }));
+                                       }}
+                                       placeholder="0"
+                                       className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-sm"
+                                     />
                                   </div>
                                 </div>
                               </div>
@@ -3148,19 +3173,31 @@ function RequestDetailView({
                           >
                             ₱
                           </span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={formatCurrencyForDisplay(priceRange.min)}
-                            onChange={(e) =>
-                              setPriceRange((prev) => ({
-                                ...prev,
-                                min: sanitizeCurrencyInput(e.target.value),
-                              }))
-                            }
-                            placeholder="0"
-                            className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-xs md:pl-8 md:pr-4 md:py-2.5 md:text-sm"
-                          />
+                           <input
+                             type="text"
+                             inputMode="decimal"
+                             value={formatCurrencyForDisplay(priceRange.min)}
+                             onChange={(e) =>
+                               setPriceRange((prev) => ({
+                                 ...prev,
+                                 min: sanitizeCurrencyInput(e.target.value),
+                               }))
+                             }
+                             onBlur={(e) => {
+                               const v = e.target.value;
+                               const [w, d] = v.split(".");
+                               setPriceRange((prev) => ({
+                                 ...prev,
+                                 min: !d
+                                   ? `${w}.00`
+                                   : d.length < 2
+                                     ? `${w}.${d.padEnd(2, "0")}`
+                                     : v,
+                               }));
+                             }}
+                             placeholder="0"
+                             className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-xs md:pl-8 md:pr-4 md:py-2.5 md:text-sm"
+                           />
                         </div>
                       </div>
                       <div>
@@ -3174,19 +3211,31 @@ function RequestDetailView({
                           >
                             ₱
                           </span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={formatCurrencyForDisplay(priceRange.max)}
-                            onChange={(e) =>
-                              setPriceRange((prev) => ({
-                                ...prev,
-                                max: sanitizeCurrencyInput(e.target.value),
-                              }))
-                            }
-                            placeholder="0"
-                            className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-xs md:pl-8 md:pr-4 md:py-2.5 md:text-sm"
-                          />
+                           <input
+                             type="text"
+                             inputMode="decimal"
+                             value={formatCurrencyForDisplay(priceRange.max)}
+                             onChange={(e) =>
+                               setPriceRange((prev) => ({
+                                 ...prev,
+                                 max: sanitizeCurrencyInput(e.target.value),
+                               }))
+                             }
+                             onBlur={(e) => {
+                               const v = e.target.value;
+                               const [w, d] = v.split(".");
+                               setPriceRange((prev) => ({
+                                 ...prev,
+                                 max: !d
+                                   ? `${w}.00`
+                                   : d.length < 2
+                                     ? `${w}.${d.padEnd(2, "0")}`
+                                     : v,
+                               }));
+                             }}
+                             placeholder="0"
+                             className="w-full rounded-xl border border-blue-200 bg-white pl-7 pr-3 py-2 text-xs md:pl-8 md:pr-4 md:py-2.5 md:text-sm"
+                           />
                         </div>
                       </div>
                     </div>
