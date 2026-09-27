@@ -103,6 +103,17 @@ const formatBudgetForDisplay = (raw) => {
   return decimals === undefined ? grouped : `${grouped}.${decimals}`;
 };
 
+const sanitizeNumberInput = (raw) => {
+  let value = String(raw).replace(/[^0-9.]/g, "");
+  const dot = value.indexOf(".");
+  if (dot !== -1) {
+    value = `${value.slice(0, dot + 1)}${value.slice(dot + 1).replace(/\./g, "")}`;
+    const [whole, decimals] = value.split(".");
+    value = decimals === undefined ? whole : `${whole}.${decimals.slice(0, 2)}`;
+  }
+  return value;
+};
+
 const addDecimalToBudget = (raw) => {
   if (!raw) return "";
   const [whole, decimals] = raw.split(".");
@@ -1341,7 +1352,9 @@ function CustomerRequestDelivery() {
     const storedValue =
       name === "budgetMin" || name === "budgetMax"
         ? sanitizeBudgetInput(value)
-        : value;
+        : name === "cargoWeight"
+          ? sanitizeNumberInput(value)
+          : value;
     const next = { ...formData, [name]: storedValue };
     // LocationInput passes lat/lng alongside the address text when the
     // value came from a search suggestion or the map picker (both already
@@ -1730,9 +1743,9 @@ function CustomerRequestDelivery() {
         })),
       truck_type: formData.truckType,
       item_type: formData.itemType,
-      cargo_weight: cargoWeightNum,
-      budget_min: formData.budgetMin.replace(/\.$/, "") || null,
-      budget_max: formData.budgetMax.replace(/\.$/, "") || null,
+      cargo_weight: parseFloat(cargoWeightNum) || null,
+      budget_min: formData.budgetMin ? parseFloat(formData.budgetMin.replace(/\.$/, "")) || 0 : null,
+      budget_max: formData.budgetMax ? parseFloat(formData.budgetMax.replace(/\.$/, "")) || 0 : null,
       notes: formData.notes || null,
       status: "PENDING_REQUEST",
       suggested_route: suggestedRoute,
