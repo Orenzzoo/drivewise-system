@@ -7,6 +7,7 @@ import {
   getPmsStatus,
   getPmsStatusDisplayLabel,
 } from "../components/trucks/utils/pms.js";
+import { maintenanceStartMileageUpdate } from "../components/trucks/utils/maintenance.js";
 import AddTruckModal from "../components/AddTruckModal.jsx";
 import { Search, ChevronRight, Edit } from "lucide-react";
 // Truck type options are defined directly here as mockTrucks.js has been removed.
@@ -20,6 +21,10 @@ const TRUCK_TYPES = [
   "4T DRY",
   "4T REF",
 ];
+// Normalize truck type values for comparisons (e.g. "1T_DRY" → "1T DRY")
+function normalizeTruckType(value) {
+  return String(value || "").replace(/_/g, " ");
+}
 import { supabase } from "../lib/supabaseClient.js";
 import useUserRole from "../hooks/useUserRole.js";
 
@@ -40,7 +45,9 @@ const TRUCK_TYPE_TAG_CLASSES = {
 
 function TypeTag({ type }) {
   // Map legacy "L300" to the new "LUV" identifier for backward compatibility.
-  const normalized = type === "L300" ? "LUV" : type;
+  // Also normalize underscored values like "1T_DRY" to "1T DRY".
+  const raw = type === "L300" ? "LUV" : type;
+  const normalized = String(raw).replace(/_/g, " ");
   return (
     <span
       className={`inline-flex min-w-[78px] items-center justify-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.01em] ${
@@ -418,7 +425,7 @@ function SupTrucks() {
   const typeCounts = useMemo(() => {
     const counts = { All: trucks.length };
     TYPE_OPTIONS.forEach((type) => {
-      counts[type] = trucks.filter((t) => t.truck_type === type).length;
+      counts[type] = trucks.filter((t) => normalizeTruckType(t.truck_type) === type).length;
     });
     return counts;
   }, [trucks]);
@@ -467,7 +474,7 @@ function SupTrucks() {
               .includes(query);
 
         const matchesType =
-          selectedType === "All" || truck.truck_type === selectedType;
+          selectedType === "All" || normalizeTruckType(truck.truck_type) === selectedType;
         const matchesStatus =
           selectedStatus === "All" || (truck.status ?? "-") === selectedStatus;
         // PMS status filter
@@ -485,9 +492,9 @@ function SupTrucks() {
 
         // If creation dates are equal, fall back to type order.
         const leftOrder =
-          TRUCK_TYPE_ORDER[leftTruck.truck_type] ?? Number.MAX_SAFE_INTEGER;
+          TRUCK_TYPE_ORDER[normalizeTruckType(leftTruck.truck_type)] ?? Number.MAX_SAFE_INTEGER;
         const rightOrder =
-          TRUCK_TYPE_ORDER[rightTruck.truck_type] ?? Number.MAX_SAFE_INTEGER;
+          TRUCK_TYPE_ORDER[normalizeTruckType(rightTruck.truck_type)] ?? Number.MAX_SAFE_INTEGER;
         if (leftOrder !== rightOrder) return leftOrder - rightOrder;
 
         // Finally, sort by plate number for deterministic ordering.
@@ -577,13 +584,31 @@ function SupTrucks() {
         });
       }
       if (!existing) {
+        // The edit payload no longer carries current_mileage (the modal's
+        // field is a read-only display of the live counter), so read it
+        // fresh from the DB -- this is the value the maintenance archives
+        // into Previous Mileage. The trucks update above doesn't touch it,
+        // so this read is the current stored counter.
+        const { data: freshTruck } = await supabase
+          .from("trucks")
+          .select("current_mileage")
+          .eq("id", truckToEdit.id)
+          .maybeSingle();
+        const mileageAtStart =
+          Number(freshTruck?.current_mileage ?? truckToEdit.current_mileage) ||
+          0;
         const { error: maintError } = await supabase
           .from("maintenance_records")
           .insert({
             truck_id: truckToEdit.id,
             start_date: todayISO(),
             end_date: todayISO(),
-            mileage: Number(payload.current_mileage) || 0,
+            // Column names per the maintenance_records schema -- `mileage`
+            // does not exist on this table (this insert used to fail because
+            // of it), the record stores `current_mileage` + `mileage_at_service`
+            // like the profile pages' own "Add Record" modal does.
+            current_mileage: mileageAtStart,
+            mileage_at_service: mileageAtStart,
             type: "Preventive Maintenance",
             shop: "In-House",
             notes: "",
@@ -596,6 +621,24 @@ function SupTrucks() {
               "Failed to create maintenance record: " + maintError.message,
             type: "error",
           });
+        } else if (truckToEdit.id) {
+          // The maintenance is starting now: archive Current Mileage as
+          // Previous Mileage and reset Current Mileage to 0 (same rule the
+          // Sup/Admin profile pages apply -- shared helper, one definition).
+          const { error: mileageError } = await supabase
+            .from("trucks")
+            .update(
+              maintenanceStartMileageUpdate(mileageAtStart, todayISO()),
+            )
+            .eq("id", truckToEdit.id);
+          if (mileageError) {
+            setToast({
+              message:
+                "Maintenance logged, but resetting mileage failed: " +
+                mileageError.message,
+              type: "error",
+            });
+          }
         }
       }
     }

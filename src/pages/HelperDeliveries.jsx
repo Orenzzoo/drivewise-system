@@ -51,6 +51,7 @@ import {
   MANILA_TIMEZONE,
 } from "../lib/manilaTime.js";
 import { GOOGLE_MAPS_LOADER_OPTIONS } from "../lib/googleMapsLoaderOptions.js";
+import { normalizeTruckTypeName, normalizeItemTypeName } from "../lib/deliveryOptions.js";
 
 // Same alert taxonomy DriverDeliveries.jsx uses (06_DROWSINESS_ALERT_PIPELINE.md)
 // — kept in sync manually since the two pages don't share a module today.
@@ -1010,7 +1011,7 @@ function DeliveryDetailView({
               <div>
                 <p className="text-[10px] text-slate-500">Product Type</p>
                 <p className="font-medium text-slate-900">
-                  {delivery.itemType}
+                  {normalizeItemTypeName(delivery.itemType)}
                 </p>
               </div>
               <div>
@@ -1063,7 +1064,7 @@ function DeliveryDetailView({
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                   <p className="text-xs font-medium text-emerald-800">
-                    PHP {Number(delivery.quotation.amount).toLocaleString()}
+                    PHP {Number(delivery.quotation.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
                 {delivery.quotation.breakdown?.length > 0 && (
@@ -1075,14 +1076,14 @@ function DeliveryDetailView({
                       <div key={idx} className="flex justify-between text-xs">
                         <span className="text-slate-600">{item.label}</span>
                         <span className="font-medium text-slate-800">
-                          ₱{Number(item.amount).toLocaleString()}
+                          ₱{Number(item.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     ))}
                     <div className="flex justify-between border-t border-teal-300 pt-1.5 text-xs font-bold">
                       <span className="text-slate-800">Total</span>
                       <span className="text-slate-800">
-                        ₱{Number(delivery.quotation.amount).toLocaleString()}
+                        ₱{Number(delivery.quotation.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -1132,7 +1133,7 @@ function DeliveryDetailView({
                     {delivery.crew.truck.plateNumber}
                   </span>
                   <span className="truncate text-slate-500">
-                    &bull; {delivery.crew.truck.truckType} &bull;{" "}
+                     &bull; {normalizeTruckTypeName(delivery.crew.truck.truckType)} &bull;{" "}
                     {delivery.crew.truck.capacity}
                   </span>
                 </div>
@@ -2108,7 +2109,7 @@ function HelperDeliveries() {
                           </div>
                           <p className="truncate text-xs font-bold text-teal-900">
                             {workspaceDelivery.quotation
-                              ? `₱${Number(workspaceDelivery.quotation.amount).toLocaleString()}`
+                              ? `₱${Number(workspaceDelivery.quotation.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                               : ""}
                           </p>
                         </div>
@@ -2253,7 +2254,7 @@ function HelperDeliveries() {
                               Product Type
                             </p>
                             <p className="font-medium text-slate-900">
-                              {workspaceDelivery.itemType}
+                              {normalizeItemTypeName(workspaceDelivery.itemType)}
                             </p>
                           </div>
                           <div>
@@ -2291,7 +2292,7 @@ function HelperDeliveries() {
                                 {workspaceDelivery.crew.truck.plateNumber}
                               </span>
                               <span className="truncate text-slate-500">
-                                &bull; {workspaceDelivery.crew.truck.truckType} &bull;{" "}
+                                 &bull; {normalizeTruckTypeName(workspaceDelivery.crew.truck.truckType)} &bull;{" "}
                                 {workspaceDelivery.crew.truck.capacity}
                               </span>
                             </div>

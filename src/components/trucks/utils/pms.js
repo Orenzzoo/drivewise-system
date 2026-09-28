@@ -14,8 +14,11 @@ export function getPmsStatus(truck) {
   if (!previousMaintenanceDate) return "completed";
 
   const now = new Date();
-  const mileageDiff =
-    (truck.current_mileage ?? 0) - (truck.previous_mileage ?? 0);
+  // current_mileage restarts at 0 the moment a maintenance starts
+  // (maintenanceStartMileageUpdate), so it already IS the distance driven
+  // since the last maintenance -- subtracting previous_mileage on top of that
+  // would under-count every truck.
+  const mileageDiff = truck.current_mileage ?? 0;
   const daysDiff =
     (now - new Date(previousMaintenanceDate)) / (1000 * 60 * 60 * 24);
 
@@ -43,14 +46,21 @@ export function getPmsStatus(truck) {
 }
 
 /**
- * Use the newest completed maintenance record as the PMS baseline.
- * This keeps list views correct when older truck baseline fields are stale.
+ * Use the newest maintenance record as the PMS baseline (previous_mileage /
+ * previous_maintenance_date). This keeps list views correct when older truck
+ * baseline fields are stale. "In Progress" records count as well as
+ * "Completed" ones: the mileage archive happens when a maintenance *starts*,
+ * so the newest open record already holds the freshest baseline.
  */
 export function addMaintenanceBaselines(trucks, maintenanceRecords) {
   const latestByTruck = new Map();
 
   for (const record of maintenanceRecords || []) {
-    if (record.status !== "Completed" || !record.truck_id) continue;
+    if (
+      (record.status !== "Completed" && record.status !== "In Progress") ||
+      !record.truck_id
+    )
+      continue;
 
     const recordDate = record.end_date || record.start_date;
     if (!recordDate) continue;

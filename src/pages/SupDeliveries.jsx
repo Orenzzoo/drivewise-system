@@ -67,11 +67,16 @@ import {
 import { REROUTE_REASON_LABELS } from "../lib/rerouteReasons.js";
 import {
   formatManilaTimestamp,
-  formatManilaDateTime,
   MANILA_TIMEZONE,
   getManilaFields,
   isManilaDatePast,
 } from "../lib/manilaTime.js";
+import {
+  formatIsoDateTime,
+  mapDbRequest,
+  mapFleetCrewMember,
+  mapFleetTruck,
+} from "../lib/deliveryRequestMapping.js";
 import {
   customer_deliveries,
   delivery_drivers,
@@ -84,6 +89,7 @@ import {
   delivery_supervisor_data,
   completed_delivery_reports,
 } from "../lib/mockDeliveriesData.js";
+import { normalizeTruckTypeName, normalizeItemTypeName } from "../lib/deliveryOptions.js";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -264,14 +270,6 @@ function formatDateTime(dateStr, timeStr, timeEndStr) {
 }
 
 // Formats a full ISO timestamp (delivery_requests.created_at) into the same
-// "Aug 3, 2026, 11:02 PM" style used for pickup/drop-off dates. Pinned to
-// Asia/Manila (see lib/manilaTime.js) -- previously used the browser's own
-// local timezone via Date's local getters, correct only by coincidence on
-// dev machines already set to Manila time.
-function formatIsoDateTime(iso) {
-  return formatManilaDateTime(iso, { includeYear: true });
-}
-
 // What the customer actually asked for -- unlike getTruckType below, this
 // never falls back to the assigned truck's own type, so a mismatched
 // assignment (e.g. requested L300, assigned a 1T Dry Van truck) stays
@@ -311,8 +309,9 @@ function getTruckCapacity(r) {
 // meat_seafood and frozen_dairy are the ones only reefer (REF) trucks can
 // carry per ITEM_TRUCK_COMPATIBILITY (legacy pre-trim codes fresh_food,
 // frozen, dairy, pharmaceuticals kept matching for older rows), plus
-// mapDbRequest capitalizes the code. Human-readable mock labels (e.g.
-// "Frozen Goods") are also accepted. Anything else is Ordinary.
+// mapDbRequest normalizes the code to its label. Human-readable mock
+// labels (e.g. "Frozen Goods") are also accepted. Anything else is
+// Ordinary.
 function getCommodityType(itemType) {
   const t = String(itemType || "")
     .replace(/[\s_]+/g, "")
@@ -352,7 +351,7 @@ function getTotalWeight(r) {
 }
 function getPriceRangeBid(r) {
   if (r.budgetMin != null && r.budgetMax != null) {
-    return `₱${Number(r.budgetMin).toLocaleString()} – ₱${Number(r.budgetMax).toLocaleString()}`;
+    return `₱${Number(r.budgetMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱${Number(r.budgetMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   return "less than PHP 10,000.00";
 }
@@ -463,7 +462,7 @@ function buildQuotationDefaults(request, rules = DEFAULT_QUOTATION_RULES) {
   // Merge so a partially-saved rule set never yields undefined math inputs.
   const r = { ...DEFAULT_QUOTATION_RULES, ...rules };
   const fmt = (v) =>
-    Number(v).toLocaleString("en-US", { minimumFractionDigits: 2 });
+    Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Round money up to tidy steps so defaults look hand-entered, not computed.
   const round = (v, step = 50) => Math.max(step, Math.round(v / step) * step);
 
@@ -610,6 +609,13 @@ function parseMoney(str) {
   return isNaN(num) ? 0 : num;
 }
 
+function fmtPesoValue(v) {
+  return parseMoney(v).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function isDetailedBreakdown(quotation) {
   return Boolean(
     quotation?.breakdown &&
@@ -634,7 +640,7 @@ function MoneyInput({ value, onValueChange, accent = "blue" }) {
         if (clean && !isNaN(parseFloat(clean))) {
           onValueChange(
             parseFloat(clean).toLocaleString("en-US", {
-              minimumFractionDigits: 2,
+              minimumFractionDigits: 2, maximumFractionDigits: 2,
             }),
           );
         }
@@ -666,8 +672,7 @@ function QuotationExpenseForm({
 }) {
   const fm = (v) =>
     parseMoney(v).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
     });
   const directExpenses = form.directExpenses;
   const indirectExpenses = form.indirectExpenses;
@@ -730,12 +735,12 @@ function QuotationExpenseForm({
           <input
             type="text"
             readOnly
-            value={`₱${(parseMoney(directExpenses.dieselRate) * distanceKm).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+            value={`₱${(parseMoney(directExpenses.dieselRate) * distanceKm).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             className="w-40 rounded-lg border border-blue-200 px-3 py-2 text-sm text-right font-semibold text-slate-900 bg-white"
           />
         </div>
         <p className="text-sm text-blue-700 ml-1 mt-1 mb-2">
-          a. Diesel Rate ({directExpenses.dieselRate || "0"} × {distanceLabel})
+          a. Diesel Rate ({fm(directExpenses.dieselRate || "0")} × {distanceLabel})
         </p>
 
         <p className="text-sm font-semibold text-blue-700 ml-0.5 mb-2 mt-3">
@@ -931,8 +936,8 @@ function QuotationExpenseForm({
           <p className="text-xs text-slate-500">
             Customer's price range bid:{" "}
             <span className="font-semibold">
-              ₱{Number(customerBidMin).toLocaleString()} – ₱
-              {Number(customerBidMax).toLocaleString()}
+              ₱{Number(customerBidMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱
+              {Number(customerBidMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </p>
         )}
@@ -940,7 +945,7 @@ function QuotationExpenseForm({
           <p className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             The proposed rate is past the customer's price range bid (₱
-            {Number(customerBidMax).toLocaleString()}). Adjust the quotation or
+            {Number(customerBidMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}). Adjust the quotation or
             expect a counter-offer.
           </p>
         )}
@@ -948,8 +953,8 @@ function QuotationExpenseForm({
           <p className="flex items-center gap-1.5 rounded-lg bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700">
             <Handshake className="h-3.5 w-3.5 shrink-0" />
             Customer requested a counter-offer range of ₱
-            {Number(customerCounterMin).toLocaleString()} – ₱
-            {Number(customerCounterMax).toLocaleString()}. Consider this when
+            {Number(customerCounterMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱
+            {Number(customerCounterMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Consider this when
             setting the proposed rate.
           </p>
         )}
@@ -2823,18 +2828,21 @@ function DeliveryRequestDetails({ request, realDistanceKm, suggestedRoute }) {
             Vehicle Type
           </h4>
           <div className="space-y-1.5">
-            <Row label="Truck Type" value={getRequestedTruckType(request)} />
+            <Row
+              label="Truck Type"
+              value={normalizeTruckTypeName(getRequestedTruckType(request))}
+            />
             {request.crew?.truck &&
               normalizeTruckType(request.crew.truck.truckType) !==
                 normalizeTruckType(getRequestedTruckType(request)) && (
-                <Row
-                  label="Assigned Truck Type"
-                  value={
-                    <span className="text-amber-600">
-                      {request.crew.truck.truckType} (mismatch)
-                    </span>
-                  }
-                />
+                  <Row
+                   label="Assigned Truck Type"
+                   value={
+                     <span className="text-amber-600">
+                       {normalizeTruckTypeName(request.crew.truck.truckType)} (mismatch)
+                     </span>
+                   }
+                 />
               )}
             <Row label="Capacity" value={getTruckCapacity(request)} />
             <Row
@@ -2865,7 +2873,7 @@ function DeliveryRequestDetails({ request, realDistanceKm, suggestedRoute }) {
             Deliverable Items
           </h4>
           <div className="space-y-1.5">
-            <Row label="Item Type" value={request.itemType} />
+             <Row label="Item Type" value={normalizeItemTypeName(request.itemType)} />
             <Row label="Est. Total Weight" value={getTotalWeight(request)} />
           </div>
         </div>
@@ -2884,8 +2892,8 @@ function DeliveryRequestDetails({ request, realDistanceKm, suggestedRoute }) {
               <div className="mt-1.5 flex items-center gap-1.5 rounded-xl bg-orange-50 border border-orange-100 px-4 py-2 text-xs font-semibold text-orange-700">
                 <Handshake className="h-3.5 w-3.5 shrink-0" />
                 Customer requested a counter-offer: ₱
-                {Number(request.customerCounterMin).toLocaleString()} – ₱
-                {Number(request.customerCounterMax).toLocaleString()}
+                {Number(request.customerCounterMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱
+                {Number(request.customerCounterMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             )}
         </div>
@@ -2943,7 +2951,7 @@ function BreakdownRow({ label, value, indent = false }) {
     >
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <span className="text-sm font-semibold text-slate-900">
-        ₱{num.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        ₱{num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
     </div>
   );
@@ -2955,7 +2963,7 @@ function QuotationBreakdown({ quotation, title }) {
   const i = b.indirectExpenses || {};
   const c = b.calculated || {};
   const fm = (v) =>
-    `₱${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    `₱${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3154,7 +3162,7 @@ function QuotationTab({ delivery }) {
           <span className="text-lg font-bold text-emerald-700">
             ₱
             {Number(delivery.approvedAmount).toLocaleString("en-US", {
-              minimumFractionDigits: 2,
+              minimumFractionDigits: 2, maximumFractionDigits: 2,
             })}
           </span>
         </div>
@@ -3394,7 +3402,7 @@ function TripDetailsTab({ delivery, report }) {
                 </p>
                 <p className="flex items-center gap-2 text-xs text-slate-500">
                   <Truck className="h-3.5 w-3.5" />
-                  {crew.truck?.plateNumber} • {crew.truck?.truckType}
+                   {crew.truck?.plateNumber} • {normalizeTruckTypeName(crew.truck?.truckType)}
                 </p>
               </div>
               {crew.driver.rating && (
@@ -4018,7 +4026,16 @@ function RerouteEventsSection({ rerouteEvents }) {
   );
 }
 
-function CompletedDeliveryReport({ delivery }) {
+// Exported for the Admin portal's read-only delivery details page
+// (AdminDeliveryDetails.jsx, route /admin/deliveries/:deliveryId) so an
+// Admin sees this exact report without entering the Supervisor portal
+// (ProtectedRoute bounces Admins off /supervisor/*, and SupLayout must
+// never render for them). Read-only -- the interactive quotation/
+// assignment workflow lives in the inbox modal, not here.
+export function CompletedDeliveryReport({
+  delivery,
+  hideEmptyTabs = false,
+}) {
   const [reportTab, setReportTab] = useState("details");
   // Real Trip Details / DriveWise Report data (2026-08-14), fetched per
   // delivery from sessions/alerts/gps_logs -- see buildRealTripAndBehaviorReport.
@@ -4137,9 +4154,19 @@ function CompletedDeliveryReport({ delivery }) {
   // identical fix).
   const hasRouteTabContent =
     Boolean(report?.routeDeviation) || report?.rerouteEvents?.length > 0;
-  const tabs = report
+  // hideEmptyTabs (Admin details page): drop tabs that would render with no
+  // data instead of showing them empty -- the Details tab always stays.
+  // Trip/Behavior/Route are already report-gated above; only Quotation needs
+  // an explicit content check (a delivery with no submitted quotation).
+  const hasQuotation = Boolean(
+    delivery.quotation || delivery.updatedQuotation || delivery.approvedAmount,
+  );
+  let tabs = report
     ? REPORT_TABS.filter((t) => t.id !== "route" || hasRouteTabContent)
     : REPORT_TABS.filter((t) => t.id === "details" || t.id === "quotation");
+  if (hideEmptyTabs && !hasQuotation) {
+    tabs = tabs.filter((t) => t.id !== "quotation");
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -4208,7 +4235,8 @@ function CompletedDeliveryReport({ delivery }) {
   );
 }
 
-function CancelledDeliveryDetails({ delivery }) {
+// (Same Admin-sharing note as CompletedDeliveryReport above.)
+export function CancelledDeliveryDetails({ delivery }) {
   // Real delivery_requests rows carry the cancellation fields directly
   // (cancelledBy/cancelReason/cancelledAt) rather than the mock
   // `cancellation` envelope — prefer those when the envelope is absent.
@@ -4288,7 +4316,7 @@ function CancelledDeliveryDetails({ delivery }) {
               {delivery.approvedAmount && (
                 <Row
                   label="Approved Amount"
-                  value={`₱${Number(delivery.approvedAmount).toLocaleString()}`}
+                  value={`₱${Number(delivery.approvedAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 />
               )}
             </div>
@@ -4305,7 +4333,7 @@ function CancelledDeliveryDetails({ delivery }) {
             <Row label="Driver" value={delivery.crew.driver.name} />
             <Row
               label="Truck"
-              value={`${delivery.crew.truck.plateNumber} • ${delivery.crew.truck.truckType}`}
+               value={`${delivery.crew.truck.plateNumber} • ${normalizeTruckTypeName(delivery.crew.truck.truckType)}`}
             />
             <Row
               label="Helpers"
@@ -4499,167 +4527,19 @@ function PaginationBar({ page, setPage, totalPages }) {
   );
 }
 
-// DB rows are snake_case; the inbox (and the detail view it feeds) expects the
-// camelCase shape used by the rest of this page, so each delivery_requests row
-// is mapped here. customer_records isn't client-readable (SUPABASE_GOTCHAS.md
-// #7), so the display name comes from the admin-users Edge Function's
-// list-clients action instead.
-// Map a real `trucks` row to the assignment picker shape. Real trucks have no
-// availability status or default-driver mapping (those only exist on the mock
-// fleet); `commodity_type` exists on real trucks too but is intentionally not
-// surfaced here — the Deliveries tab's Commodity Type label is computed from
-// the request's item_type (see getCommodityType), not the truck's. So only the
-// fields real data provides for the picker are kept.
-function mapFleetTruck(t) {
-  return {
-    id: t.id,
-    plateNumber: t.plate_number,
-    truckType: t.truck_type,
-    brand: t.brand,
-    model: t.model,
-    capacity:
-      t.max_capacity != null
-        ? `${Number(t.max_capacity).toLocaleString()} kg`
-        : null,
-    capacityKg: t.max_capacity,
-  };
-}
-
-// Map one `list-crew` member (Driver/Helper user merged with their *_records
-// row) to the assignment picker shape. `id` is the crew record id (D001/H001)
-// — what assignCrew persists as assigned_driver_id / assigned_helper_ids.
-function mapFleetCrewMember(m) {
-  return {
-    id: (m.record_id || "").trim(),
-    authId: m.id,
-    name: [m.first_name, m.middle_name, m.last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim(),
-    role: m.role,
-    // Client names (customer_records.client_name) this crew member
-    // specializes in, attached by list-crew via crew_client_specialties.
-    clientSpecialties: m.client_specialties || [],
-    // Self-set weekly working days (crew_availability) — feeds the
-    // Available/Unavailable badge in the assignment pickers.
-    workingDays: m.working_days || [],
-  };
-}
-
-// Rebuild the assigned crew (driver/helpers/truck) from the persisted
-// assignment columns using the real fleet loaded for the pickers.
-function buildAssignedCrew(row, fleet) {
-  if (!row.assigned_driver_id) return null;
-  return {
-    driver: fleet.drivers.find((d) => d.id === row.assigned_driver_id) || null,
-    helpers: (row.assigned_helper_ids || [])
-      .map((id) => fleet.helpers.find((h) => h.id === id))
-      .filter(Boolean),
-    truck: row.assigned_truck_plate
-      ? fleet.trucks.find((t) => t.plateNumber === row.assigned_truck_plate) ||
-        null
-      : null,
-  };
-}
-
-function mapDbRequest(row, clientName, fleet) {
-  const name = clientName || "Client";
-  return {
-    id: row.id,
-    customerAuthId: row.customer_auth_id,
-    customerName: name,
-    companyName: name,
-    itemType: row.item_type
-      ? row.item_type.charAt(0).toUpperCase() + row.item_type.slice(1)
-      : row.item_type,
-    otherItemType: row.other_item_type,
-    truckType: row.truck_type,
-    cargoWeight: row.cargo_weight,
-    pickupDate: row.pickup_date,
-    pickupTime: row.pickup_time,
-    pickupTimeEnd: row.pickup_time_end || null,
-    dropoffDate: row.dropoff_date,
-    dropoffTime: row.dropoff_time,
-    dropoffTimeEnd: row.dropoff_time_end || null,
-    pickupAddress: row.pickup_location,
-    pickupLat: row.pickup_lat,
-    pickupLng: row.pickup_lng,
-    deliveryAddress: row.dropoff_location,
-    dropoffLat: row.dropoff_lat,
-    dropoffLng: row.dropoff_lng,
-    // Reference-only intermediate stops between pickup/dropoff, customer-entered
-    // at booking time — read-only here (02B_MULTI_STOP_DELIVERIES.md).
-    stops: Array.isArray(row.stops) ? row.stops : [],
-    // Proof-photo state for the first two items in the chain (Pickup,
-    // Drop-off), written by the Helper's completion actions — read-only here
-    // (02C_ROUTE_STYLING_AND_PROOF_VISIBILITY.md).
-    pickupPhotoUrl: row.pickup_photo_url || null,
-    dropoffPhotoUrl: row.dropoff_photo_url || null,
-    // pickupCompletedAt/pickupArrivedAt/dropoffArrivedAt were all missing
-    // from this mapper (found 2026-09-09, live end-to-end test): Progress
-    // Timeline's "Pickup Confirmed" row always showed "—" with no
-    // timestamp, and Trip Details' per-location Arrival always showed "Not
-    // recorded for this trip" even on trips where the Driver genuinely
-    // tapped Arrived and the Helper genuinely confirmed Pickup — the real
-    // columns existed and were populated, buildRealTripAndBehaviorReport
-    // already read delivery.pickupCompletedAt/pickupArrivedAt/
-    // dropoffArrivedAt correctly, this mapper just never carried them
-    // through from the raw row in the first place.
-    pickupCompletedAt: row.pickup_completed_at || null,
-    dropoffCompletedAt: row.dropoff_completed_at || null,
-    pickupArrivedAt: row.pickup_arrived_at || null,
-    dropoffArrivedAt: row.dropoff_arrived_at || null,
-    // Frozen planned route (Pickup -> Drop-off -> Stops), if the Driver
-    // app's pre-trip screen already saved one — feeds the real Route
-    // Deviation Report (buildRealTripAndBehaviorReport, 11_ROUTE_COMPARISON.md).
-    // Deliberately null here (2026-09-09) -- the bulk list query no longer
-    // fetches suggested_route at all (perf fix, see loadInbox's query
-    // comment); this field is overwritten locally once loaded lazily, by
-    // whichever of the two loadSuggestedRoute effects applies to this row.
-    suggestedRoute: Array.isArray(row.suggested_route)
-      ? row.suggested_route
-      : null,
-    budgetMin: row.budget_min,
-    budgetMax: row.budget_max,
-    notes: row.notes,
-    status: row.status,
-    createdAt: row.created_at,
-    quotation: null,
-    updatedQuotation: null,
-    customerCounterMin: row.customer_counter_min,
-    customerCounterMax: row.customer_counter_max,
-    cancelledBy: row.cancelled_by,
-    cancelReason: row.cancel_reason,
-    cancelledAt: row.cancelled_at ? formatIsoDateTime(row.cancelled_at) : null,
-    cancelledFromStatus: row.cancelled_from_status,
-    // Customer confirmation state (written by the customer via
-    // CustomerDeliveries.jsx; the Completed module reads these).
-    receivedConfirmed: row.received_confirmed,
-    receivedConfirmedAt: row.received_confirmed_at
-      ? formatIsoDateTime(row.received_confirmed_at)
-      : null,
-    completedAt: row.completed_at ? formatIsoDateTime(row.completed_at) : null,
-    // Rebuild the assigned crew (same shape the assignment pickers produce)
-    // from the persisted columns so an assigned request still shows its
-    // driver/helpers/truck after a reload.
-    crew: row.assigned_driver_id
-      ? buildAssignedCrew(
-          row,
-          fleet || { drivers: [], helpers: [], trucks: [] },
-        )
-      : null,
-    assignedAt: row.assigned_at ? formatIsoDateTime(row.assigned_at) : null,
-  };
-}
+// DB row -> UI request-shape mapping (mapFleetTruck, mapFleetCrewMember,
+// mapDbRequest, formatIsoDateTime) lives in lib/deliveryRequestMapping.js,
+// shared with the Admin portal's read-only delivery details page
+// (AdminDeliveryDetails.jsx) so both portals map identically.
 
 // The customer's counter-offer range, read from the delivery_requests counter
 // columns (real data) with a fallback to the legacy single-amount mock shape.
 function getCounterOfferRange(r) {
   if (r.customerCounterMin != null && r.customerCounterMax != null) {
-    return `₱${Number(r.customerCounterMin).toLocaleString()} – ₱${Number(r.customerCounterMax).toLocaleString()}`;
+    return `₱${Number(r.customerCounterMin).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} – ₱${Number(r.customerCounterMax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   if (r.customerWants != null)
-    return `Less than PHP ${Number(r.customerWants).toLocaleString()}`;
+    return `Less than PHP ${Number(r.customerWants).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return null;
 }
 
@@ -6546,7 +6426,9 @@ function SupDeliveries() {
                           <div className="space-y-1.5">
                             <Row
                               label="Truck Type"
-                              value={getRequestedTruckType(selectedRequest)}
+                              value={normalizeTruckTypeName(
+                                getRequestedTruckType(selectedRequest),
+                              )}
                             />
                             {selectedRequest.crew?.truck &&
                               normalizeTruckType(
@@ -6558,10 +6440,10 @@ function SupDeliveries() {
                                 <Row
                                   label="Assigned Truck Type"
                                   value={
-                                    <span className="text-amber-600">
-                                      {selectedRequest.crew.truck.truckType}{" "}
-                                      (mismatch)
-                                    </span>
+                                   <span className="text-amber-600">
+                                       {normalizeTruckTypeName(selectedRequest.crew.truck.truckType)}{" "}
+                                       (mismatch)
+                                     </span>
                                   }
                                 />
                               )}
@@ -6607,7 +6489,9 @@ function SupDeliveries() {
                           <div className="space-y-1.5">
                             <Row
                               label="Item Type"
-                              value={selectedRequest.itemType}
+                              value={normalizeItemTypeName(
+                                selectedRequest.itemType,
+                              )}
                             />
                             <Row
                               label="Est. Total Weight"
@@ -6633,11 +6517,11 @@ function SupDeliveries() {
                                 Customer requested a counter-offer: ₱
                                 {Number(
                                   selectedRequest.customerCounterMin,
-                                ).toLocaleString()}{" "}
+                                ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
                                 – ₱
                                 {Number(
                                   selectedRequest.customerCounterMax,
-                                ).toLocaleString()}
+                                ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </div>
                             )}
                         </div>
@@ -6790,7 +6674,7 @@ function SupDeliveries() {
                                     {Number(
                                       selectedRequest.approvedAmount ??
                                         selectedRequest.quotation?.amount,
-                                    ).toLocaleString()}
+                                    ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </p>
                                 </div>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -6817,11 +6701,11 @@ function SupDeliveries() {
                                   Counter-offer: ₱
                                   {Number(
                                     selectedRequest.customerCounterMin,
-                                  ).toLocaleString()}{" "}
+                                  ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
                                   – ₱
                                   {Number(
                                     selectedRequest.customerCounterMax,
-                                  ).toLocaleString()}
+                                  ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                               )}
                           </div>
@@ -6848,7 +6732,9 @@ function SupDeliveries() {
                               Truck Type
                             </p>
                             <p className="text-sm font-semibold text-slate-800">
-                              {getRequestedTruckType(selectedRequest)}
+                              {normalizeTruckTypeName(
+                                getRequestedTruckType(selectedRequest),
+                              )}
                             </p>
                           </div>
                           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
@@ -6991,11 +6877,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .depreciation
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-2 border-b border-slate-200">
@@ -7009,7 +6895,7 @@ function SupDeliveries() {
                                                 .breakdown.calculated
                                                 ?.dieselTotal,
                                             ).toLocaleString("en-US", {
-                                              minimumFractionDigits: 2,
+                                              minimumFractionDigits: 2, maximumFractionDigits: 2,
                                             })}
                                           </span>
                                         </div>
@@ -7041,11 +6927,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .repairsAndMaintenance.batteries
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-1.5">
@@ -7054,11 +6940,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .repairsAndMaintenance.tires
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <p className="text-sm font-semibold text-slate-600 ml-0.5 mb-1 mt-3">
@@ -7070,11 +6956,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .salariesAndWages.driver
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-1.5">
@@ -7083,11 +6969,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .salariesAndWages.helper1
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         {selectedRequest.quotation.breakdown
@@ -7099,11 +6985,11 @@ function SupDeliveries() {
                                             </span>
                                             <span className="text-sm font-semibold text-slate-900">
                                               ₱
-                                              {
+                                              {fmtPesoValue(
                                                 selectedRequest.quotation
                                                   .breakdown.directExpenses
                                                   .salariesAndWages.helper2
-                                              }
+                                              )}
                                             </span>
                                           </div>
                                         )}
@@ -7113,11 +6999,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .tripAllowance
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-1.5">
@@ -7126,11 +7012,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .lodgingAllowance
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-1.5">
@@ -7139,11 +7025,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.directExpenses
                                                 .tollParking
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-200/60 px-4 py-3">
@@ -7157,7 +7043,7 @@ function SupDeliveries() {
                                                 .breakdown.calculated
                                                 ?.directTotal,
                                             ).toLocaleString("en-US", {
-                                              minimumFractionDigits: 2,
+                                              minimumFractionDigits: 2, maximumFractionDigits: 2,
                                             })}
                                           </span>
                                         </div>
@@ -7177,11 +7063,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.indirectExpenses
                                                 .adminFees
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-2 border-b border-slate-200">
@@ -7190,11 +7076,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.indirectExpenses
                                                 .insurance
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-2 border-b border-slate-200">
@@ -7203,11 +7089,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.indirectExpenses
                                                 .motorVehicleReg
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between py-2">
@@ -7216,11 +7102,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.quotation
                                                 .breakdown.indirectExpenses
                                                 .garageRental
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                         <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-200/60 px-4 py-3">
@@ -7234,7 +7120,7 @@ function SupDeliveries() {
                                                 .breakdown.calculated
                                                 ?.indirectTotal,
                                             ).toLocaleString("en-US", {
-                                              minimumFractionDigits: 2,
+                                              minimumFractionDigits: 2, maximumFractionDigits: 2,
                                             })}
                                           </span>
                                         </div>
@@ -7253,7 +7139,7 @@ function SupDeliveries() {
                                             selectedRequest.quotation.breakdown
                                               .calculated?.operatingTotal,
                                           ).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
+                                            minimumFractionDigits: 2, maximumFractionDigits: 2,
                                           })}
                                         </span>
                                       </div>
@@ -7267,7 +7153,7 @@ function SupDeliveries() {
                                             selectedRequest.quotation.breakdown
                                               .calculated?.income,
                                           ).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
+                                            minimumFractionDigits: 2, maximumFractionDigits: 2,
                                           })}
                                         </span>
                                       </div>
@@ -7280,7 +7166,7 @@ function SupDeliveries() {
                                           {Number(
                                             selectedRequest.quotation.amount,
                                           ).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
+                                            minimumFractionDigits: 2, maximumFractionDigits: 2,
                                           })}
                                         </span>
                                       </div>
@@ -7326,7 +7212,7 @@ function SupDeliveries() {
                                       {Number(
                                         selectedRequest.quotation.amount,
                                       ).toLocaleString("en-US", {
-                                        minimumFractionDigits: 2,
+                                        minimumFractionDigits: 2, maximumFractionDigits: 2,
                                       })}
                                     </span>
                                   </div>
@@ -7387,7 +7273,7 @@ function SupDeliveries() {
                                         {Number(
                                           selectedRequest.quotation.amount,
                                         ).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
+                                          minimumFractionDigits: 2, maximumFractionDigits: 2,
                                         })}
                                       </span>
                                     </div>
@@ -7414,11 +7300,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .depreciation
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-2 border-b border-purple-100">
@@ -7432,7 +7318,7 @@ function SupDeliveries() {
                                               .breakdown.calculated
                                               ?.dieselTotal,
                                           ).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
+                                            minimumFractionDigits: 2, maximumFractionDigits: 2,
                                           })}
                                         </span>
                                       </div>
@@ -7465,11 +7351,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .repairsAndMaintenance.batteries
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-1.5">
@@ -7478,11 +7364,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .repairsAndMaintenance.tires
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <p className="text-sm font-semibold text-purple-700 ml-0.5 mb-1 mt-3">
@@ -7494,11 +7380,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .salariesAndWages.driver
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-1.5">
@@ -7507,11 +7393,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .salariesAndWages.helper1
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       {selectedRequest.updatedQuotation
@@ -7523,11 +7409,11 @@ function SupDeliveries() {
                                           </span>
                                           <span className="text-sm font-semibold text-slate-900">
                                             ₱
-                                            {
+                                            {fmtPesoValue(
                                               selectedRequest.updatedQuotation
                                                 .breakdown.directExpenses
                                                 .salariesAndWages.helper2
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                       )}
@@ -7537,11 +7423,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .tripAllowance
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-1.5">
@@ -7550,11 +7436,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .lodgingAllowance
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-1.5">
@@ -7563,11 +7449,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.directExpenses
                                               .tollParking
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                     </div>
@@ -7585,11 +7471,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.indirectExpenses
                                               .adminFees
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-2 border-b border-purple-100">
@@ -7598,11 +7484,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.indirectExpenses
                                               .insurance
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-2 border-b border-purple-100">
@@ -7611,11 +7497,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.indirectExpenses
                                               .motorVehicleReg
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between py-2">
@@ -7624,11 +7510,11 @@ function SupDeliveries() {
                                         </span>
                                         <span className="text-sm font-semibold text-slate-900">
                                           ₱
-                                          {
+                                          {fmtPesoValue(
                                             selectedRequest.updatedQuotation
                                               .breakdown.indirectExpenses
                                               .garageRental
-                                          }
+                                          )}
                                         </span>
                                       </div>
                                     </div>
@@ -7646,7 +7532,7 @@ function SupDeliveries() {
                                             .breakdown.calculated
                                             ?.operatingTotal,
                                         ).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
+                                          minimumFractionDigits: 2, maximumFractionDigits: 2,
                                         })}
                                       </span>
                                     </div>
@@ -7660,7 +7546,7 @@ function SupDeliveries() {
                                           selectedRequest.updatedQuotation
                                             .breakdown.calculated?.income,
                                         ).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
+                                          minimumFractionDigits: 2, maximumFractionDigits: 2,
                                         })}
                                       </span>
                                     </div>
@@ -7674,7 +7560,7 @@ function SupDeliveries() {
                                           selectedRequest.updatedQuotation
                                             .amount,
                                         ).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
+                                          minimumFractionDigits: 2, maximumFractionDigits: 2,
                                         })}
                                       </span>
                                     </div>
@@ -7800,15 +7686,15 @@ function SupDeliveries() {
                         <div className="mt-4 space-y-3">
                           {selectedRequest.crew?.truck && (
                             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                              <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-center text-[10px] font-bold leading-tight text-slate-600">
-                                {selectedRequest.crew.truck.truckType}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-semibold text-slate-900">
-                                  {selectedRequest.crew.truck.plateNumber}
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  {selectedRequest.crew.truck.truckType} •{" "}
+                               <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-center text-[10px] font-bold leading-tight text-slate-600">
+                                 {normalizeTruckTypeName(selectedRequest.crew.truck.truckType)}
+                               </span>
+                               <div className="min-w-0 flex-1">
+                                 <p className="truncate text-sm font-semibold text-slate-900">
+                                   {selectedRequest.crew.truck.plateNumber}
+                                 </p>
+                                 <p className="text-xs text-slate-500">
+                                   {normalizeTruckTypeName(selectedRequest.crew.truck.truckType)} •{" "}
                                   {selectedRequest.crew.truck.capacity}
                                 </p>
                               </div>
@@ -7866,7 +7752,7 @@ function SupDeliveries() {
                                   Specialized crew required
                                 </p>
                                 <p className="mt-0.5">
-                                  Only {selectedRequest.truckType} trucks with
+                                   Only {normalizeTruckTypeName(selectedRequest.truckType)} trucks with
                                   drivers and helpers specialized for{" "}
                                   {selectedRequest.customerName} are shown.{" "}
                                   General-use trucks without the required
@@ -7898,8 +7784,8 @@ function SupDeliveries() {
                                   </div>
                                 ) : selectedTruck ? (
                                   <div className="flex flex-1 items-center gap-3 min-w-0">
-                                    <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-center text-[10px] font-bold leading-tight text-indigo-700">
-                                      {selectedTruck.truckType}
+                                     <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-center text-[10px] font-bold leading-tight text-indigo-700">
+                                       {normalizeTruckTypeName(selectedTruck.truckType)}
                                     </span>
                                     <div className="min-w-0 flex-1">
                                       <p className="flex flex-wrap items-center gap-1.5 truncate text-sm font-semibold text-slate-900">
@@ -7917,8 +7803,8 @@ function SupDeliveries() {
                                           </span>
                                         )}
                                       </p>
-                                      <p className="text-xs text-slate-500">
-                                        {selectedTruck.truckType} •{" "}
+                                       <p className="text-xs text-slate-500">
+                                         {normalizeTruckTypeName(selectedTruck.truckType)} •{" "}
                                         {selectedTruck.capacity}
                                       </p>
                                     </div>
@@ -7967,8 +7853,8 @@ function SupDeliveries() {
                                             : ""
                                         }`}
                                       >
-                                        <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
-                                          {truck.truckType}
+                                         <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
+                                           {normalizeTruckTypeName(truck.truckType)}
                                         </span>
                                         <div className="min-w-0 flex-1">
                                           <p className="flex flex-wrap items-center gap-1.5 truncate text-sm font-semibold text-slate-900">
@@ -7987,8 +7873,8 @@ function SupDeliveries() {
                                               </span>
                                             )}
                                           </p>
-                                          <p className="text-xs text-slate-500">
-                                            {truck.truckType} • {truck.capacity}
+                                           <p className="text-xs text-slate-500">
+                                             {normalizeTruckTypeName(truck.truckType)} • {truck.capacity}
                                           </p>
                                           {currentDriver && !driverWarning && (
                                             <p className="mt-0.5 text-[10px] text-slate-400">
@@ -8026,8 +7912,8 @@ function SupDeliveries() {
                                     matchingTrucks.length === 0 && (
                                       <p className="border-t border-slate-100 px-3 py-2 text-xs font-medium text-amber-600">
                                         {requiresSpecializedCrew
-                                          ? `No ${selectedRequest.truckType} trucks with specialized crew available for this client.`
-                                          : `No truck matches the requested type (${selectedRequest.truckType}).`}
+                                          ? `No ${normalizeTruckTypeName(selectedRequest.truckType)} trucks with specialized crew available for this client.`
+                                          : `No truck matches the requested type (${normalizeTruckTypeName(selectedRequest.truckType)}).`}
                                       </p>
                                     )}
                                 </div>
@@ -8476,15 +8362,15 @@ function SupDeliveries() {
                             </div>
                           )}
                           <div className="border-t border-slate-200 pt-3 flex items-center gap-3">
-                            <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
-                              {selectedTruck.truckType}
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {selectedTruck.plateNumber}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {selectedTruck.truckType} •{" "}
+                             <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-center text-[10px] font-bold leading-tight text-slate-600">
+                               {normalizeTruckTypeName(selectedTruck.truckType)}
+                             </span>
+                             <div>
+                               <p className="text-sm font-semibold text-slate-900">
+                                 {selectedTruck.plateNumber}
+                               </p>
+                               <p className="text-xs text-slate-500">
+                                 {normalizeTruckTypeName(selectedTruck.truckType)} •{" "}
                                 {selectedTruck.capacity}
                               </p>
                             </div>
@@ -9009,7 +8895,7 @@ function SupDeliveries() {
                         <ResolvedText value={row.pickupAddress} />
                       </p>
                       <p className="text-sm font-medium text-slate-800 text-center">
-                        {row.itemType}
+                        {normalizeItemTypeName(row.itemType)}
                       </p>
                       <div className="flex justify-center">
                         <ChevronRight className="h-4 w-4 text-slate-400" />
@@ -9087,7 +8973,7 @@ function SupDeliveries() {
                       </p>
                       <p className="text-sm font-semibold text-emerald-700 text-center">
                         {row.quotation
-                          ? `₱${Number(row.quotation.amount).toLocaleString()}`
+                          ? `₱${Number(row.quotation.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : ""}
                       </p>
                       <div className="flex justify-center">
@@ -9212,8 +9098,8 @@ function SupDeliveries() {
                                     <Truck className="mr-1 inline h-3.5 w-3.5" />
                                     {monitoredDelivery.crew?.truck
                                       ?.plateNumber || "Truck TBA"}
-                                    {monitoredDelivery.crew?.truck &&
-                                      ` • ${monitoredDelivery.crew.truck.truckType}`}
+                                     {monitoredDelivery.crew?.truck &&
+                                       ` • ${normalizeTruckTypeName(monitoredDelivery.crew.truck.truckType)}`}
                                   </p>
                                 </div>
                               </div>
@@ -9250,7 +9136,7 @@ function SupDeliveries() {
                                     .truck?.plateNumber || "Truck TBA"}
                                   {monitoringByDelivery[monitoredDelivery.id]
                                     .truck &&
-                                    ` • ${monitoringByDelivery[monitoredDelivery.id].truck.truckType}`}
+                                     ` • ${normalizeTruckTypeName(monitoringByDelivery[monitoredDelivery.id].truck.truckType)}`}
                                 </p>
                               </div>
                             </div>

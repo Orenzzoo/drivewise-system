@@ -6,7 +6,10 @@ import {
   DEFAULT_MAINTENANCE_INTERVAL_KM,
   DEFAULT_MAINTENANCE_INTERVAL_MONTHS,
 } from "../constants/pms.js";
-import { completeInProgressMaintenance } from "./trucks/utils/maintenance.js";
+import {
+  completeInProgressMaintenance,
+  maintenanceStartMileageUpdate,
+} from "./trucks/utils/maintenance.js";
 import { MonthPicker } from "./DateTimePicker.jsx";
 
 // Duplicate options to avoid circular imports
@@ -141,7 +144,8 @@ export default function AddTruckModal({
         date_acquired: initialData.date_acquired || "",
         max_capacity: initialData.max_capacity || "",
         // container dimensions removed (no longer in DB schema)
-        current_mileage: initialData.current_mileage || "",
+        // ?? not || so a truck at 0 shows "0" instead of an empty box
+        current_mileage: initialData.current_mileage ?? "",
         /*previous_maintenance_date: initialData.previous_maintenance_date || "",
         previous_mileage: initialData.previous_mileage || "",*/
         maintenance_interval_km:
@@ -266,7 +270,9 @@ export default function AddTruckModal({
       date_acquired: formData.date_acquired || null,
       year_model: formData.year_model || null,
       max_capacity: formData.max_capacity || null,
-      current_mileage: formData.current_mileage || null,
+      // Blank input stores 0 (not null) so the profile's Current Mileage
+      // card always has a number to show from day one.
+      current_mileage: Number(formData.current_mileage) || 0,
       previous_mileage: formData.previous_mileage || null,
       previous_maintenance_date: formData.previous_maintenance_date || null,
       maintenance_interval_km: formData.maintenance_interval_km || null,
@@ -334,13 +340,20 @@ export default function AddTruckModal({
         formData.brand === "Custom" ? formData.customBrand : formData.brand;
       const finalModel =
         formData.model === "Custom" ? formData.customModel : formData.model;
+      // NOTE: previous_mileage / previous_maintenance_date are deliberately
+      // NOT sent here. The form stopped collecting them (its fields are
+      // commented out above), so referencing formData.previous_* always
+      // produced undefined -> null and every truck edit silently wiped the
+      // Previous Mileage baseline a maintenance had just archived. Omitting
+      // the keys leaves the stored values untouched.
+      // NOTE: current_mileage is deliberately NOT sent either. The field is
+      // a read-only display now (the counter is maintained by GPS trip
+      // distance), and its value is a snapshot from when the modal opened --
+      // sending it would overwrite any distance driven since. Omitting the
+      // key leaves the live counter untouched.
       const editPayload = isSupervisor
         ? {
             status: formData.status || null,
-            current_mileage: formData.current_mileage || null,
-            previous_maintenance_date:
-              formData.previous_maintenance_date || null,
-            previous_mileage: formData.previous_mileage || null,
             maintenance_interval_km: formData.maintenance_interval_km || null,
             maintenance_interval_months:
               formData.maintenance_interval_months || null,
@@ -354,10 +367,6 @@ export default function AddTruckModal({
             date_acquired: formData.date_acquired || null,
             max_capacity: formData.max_capacity || null,
             // container dimensions removed (no longer in DB schema)
-            current_mileage: formData.current_mileage || null,
-            previous_maintenance_date:
-              formData.previous_maintenance_date || null,
-            previous_mileage: formData.previous_mileage || null,
             maintenance_interval_km: formData.maintenance_interval_km || null,
             maintenance_interval_months:
               formData.maintenance_interval_months || null,
@@ -437,15 +446,31 @@ export default function AddTruckModal({
           });
         }
         if (!existing) {
+          // Read the truck's counter fresh from the DB instead of trusting
+          // formData.current_mileage -- the field is a read-only snapshot
+          // from when the modal opened, while this is the exact value the
+          // maintenance will archive into Previous Mileage.
+          const { data: freshTruck } = await supabase
+            .from("trucks")
+            .select("current_mileage")
+            .eq("id", initialData?.id)
+            .maybeSingle();
+          const mileageAtStart =
+            Number(
+              freshTruck?.current_mileage ?? initialData?.current_mileage,
+            ) || 0;
           const { error: maintError } = await supabase
             .from("maintenance_records")
             .insert({
               truck_id: initialData?.id,
               start_date: todayISO(),
               end_date: todayISO(),
-              mileage: Number(formData.current_mileage) || 0,
-              // Store the mileage at the time of service for later calculations
-              mileage_at_service: Number(formData.current_mileage) || 0,
+              // Column names per the maintenance_records schema -- there is no
+              // `mileage` column on this table (this insert used to fail
+              // because of it); mirror the profile pages' own "Add Record"
+              // modal and set `current_mileage` + `mileage_at_service`.
+              current_mileage: mileageAtStart,
+              mileage_at_service: mileageAtStart,
               type: "Preventive Maintenance",
               shop: "In-House",
               notes: "",
@@ -454,10 +479,27 @@ export default function AddTruckModal({
             });
           if (maintError) {
             setValidationToast({
-              message:
-                "Failed to create maintenance record: " + maintError.message,
+              message: "Failed to create maintenance record: " + maintError.message,
               type: "error",
             });
+          } else if (initialData?.id) {
+            // The maintenance is starting now: archive Current Mileage as
+            // Previous Mileage and reset Current Mileage to 0 (same rule the
+            // Sup/Admin profile pages apply -- shared helper, one definition).
+            const { error: mileageError } = await supabase
+              .from("trucks")
+              .update(
+                maintenanceStartMileageUpdate(mileageAtStart, todayISO()),
+              )
+              .eq("id", initialData.id);
+            if (mileageError) {
+              setValidationToast({
+                message:
+                  "Maintenance logged, but resetting mileage failed: " +
+                  mileageError.message,
+                type: "error",
+              });
+            }
           }
         }
       }
@@ -819,23 +861,27 @@ export default function AddTruckModal({
               }`}
             />
           </div>
-          {/* Current Mileage */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700">
-              Current Mileage (km)
-            </label>
-            <input
-              name="current_mileage"
-              type="number"
-              step="1"
-              min="0"
-              placeholder="12000"
-              value={formData.current_mileage}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm"
-            />
-          </div>
+          {/* Current Mileage -- edit mode only, read-only display of the live
+          GPS-maintained counter. Hidden when adding: a new truck starts at
+          0 and the create payload defaults blank to 0. */}
+          {mode === "edit" && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700">
+                Current Mileage (km)
+              </label>
+              <input
+                name="current_mileage"
+                type="number"
+                step="1"
+                min="0"
+                placeholder="12000"
+                value={formData.current_mileage}
+                onChange={handleChange}
+                readOnly
+                className="mt-1 block w-full rounded border border-slate-300 px-2 py-1 text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
+              />
+            </div>
+          )}
           {/* Previous Maintenance Date (hidden) */
           /*
           <div>

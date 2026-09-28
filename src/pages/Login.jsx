@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Eye, EyeOff, HelpCircle, Loader2, Lock, Mail } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, Eye, EyeOff, HelpCircle, Loader2, Lock, Mail } from 'lucide-react'
 import { REMEMBER_ME_KEY, supabase } from '../lib/supabaseClient.js'
+import { claimActiveSession, decodeSessionId } from '../lib/singleSession.js'
 import { getDeactivationStatus } from '../lib/deactivation.js'
 import logoMark from '../layout/images/Logoo.png'
 import marvelEmployees from '../layout/images/MarvelEmployees.png'
@@ -50,12 +51,36 @@ async function resolveHomeRoute(userId) {
 
 function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [formValues, setFormValues] = useState(initialForm)
   const [status, setStatus] = useState('empty')
   const [errorMessage, setErrorMessage] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  // Re-hydrate from the flag the storage adapter persists, so the checkbox
+  // reflects the choice saved by the previous sign-in instead of always
+  // starting unchecked.
+  const [rememberMe, setRememberMe] = useState(() => {
+    try {
+      return localStorage.getItem(REMEMBER_ME_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
   const [checkingSession, setCheckingSession] = useState(true)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotStatus, setForgotStatus] = useState('idle')
+
+  useEffect(() => {
+    if (!location.state?.sessionRevoked) {
+      return
+    }
+    setErrorMessage(
+      'This account was signed in on another device, so this session was ended.'
+    )
+    setStatus('error')
+    window.history.replaceState(null, '')
+  }, [location.state])
 
   useEffect(() => {
     let isCurrent = true
@@ -139,8 +164,40 @@ function Login() {
       return
     }
 
+    // Record this browser's auth session as the account's only active one,
+    // evicting any session recorded from another browser/device.
+    const sessionId = decodeSessionId(authData.session?.access_token)
+    if (sessionId) {
+      await claimActiveSession(authData.user.id, sessionId)
+    }
+
     setStatus('empty')
     navigate(homeRoute, { replace: true })
+  }
+
+  const handleForgotSubmit = async (event) => {
+    event.preventDefault()
+
+    const email = forgotEmail.trim()
+    if (!email || !email.includes('@')) {
+      setForgotStatus('error')
+      return
+    }
+
+    setForgotStatus('loading')
+
+    const { error } = await supabase.functions.invoke('admin-users', {
+      body: { action: 'forgot-password', email },
+    })
+
+    if (error) {
+      setForgotStatus('error')
+      return
+    }
+
+    // The action always responds with the same generic ok (whether or not
+    // an account matches), so the UI does too — no account enumeration.
+    setForgotStatus('sent')
   }
 
   const isLoading = status === 'loading'
@@ -315,6 +372,86 @@ function Login() {
               )}
             </button>
           </form>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowForgotPassword((current) => !current)
+              setForgotStatus('idle')
+              setErrorMessage('')
+              setStatus('empty')
+            }}
+            className="mt-4 text-center text-sm font-medium text-ember-700 transition hover:text-ember-800"
+          >
+            {showForgotPassword ? 'Back to login' : 'Forgot password?'}
+          </button>
+
+          {showForgotPassword ? (
+            <form
+              className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
+              onSubmit={handleForgotSubmit}
+              noValidate
+            >
+              <p className="text-sm text-slate-600">
+                Enter the personal email address on your account. If an account
+                matches, we'll send a password reset link there.
+              </p>
+              <div className="relative">
+                <Mail
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  aria-hidden="true"
+                />
+                <input
+                  id="forgot-email"
+                  type="email"
+                  name="forgotEmail"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={forgotEmail}
+                  onChange={(event) => {
+                    setForgotEmail(event.target.value)
+                    setForgotStatus('idle')
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 transition focus:outline-none focus:ring-2 focus:ring-ember-500 focus:ring-offset-2 focus:ring-offset-slate-50"
+                />
+              </div>
+
+              {forgotStatus === 'error' ? (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                  Unable to process that request. Check the email address and try again.
+                </p>
+              ) : null}
+
+              {forgotStatus === 'sent' ? (
+                <p
+                  role="status"
+                  className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+                >
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                  If an account matches that email, a password reset link is on its way.
+                </p>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={forgotStatus === 'loading'}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-ember-500 focus:ring-offset-2 focus:ring-offset-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {forgotStatus === 'loading' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Sending…
+                  </>
+                ) : (
+                  'Send Reset Link'
+                )}
+              </button>
+            </form>
+          ) : null}
 
           <div className="mt-6 flex items-start justify-center gap-1.5 border-t border-slate-200 pt-4 text-xs text-slate-500 lg:justify-start">
             <HelpCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-slate-400" aria-hidden="true" />

@@ -3,9 +3,10 @@ import { NavLink, useNavigate } from "react-router-dom";
 import LogoutButton from "./LogoutButton.jsx";
 import { useUserProfile } from "../lib/useUserInitials.js";
 import { useDeactivationGuard } from "../lib/useDeactivationGuard.js";
+import { useSingleSessionGuard } from '../hooks/useSingleSessionGuard.js';
 import { formatCutoff } from "../lib/deactivation.js";
 
-// Profile isn't listed here — it's reached via the sidebar header (avatar)
+// Profile isn't listed here Ã¢â‚¬â€ it's reached via the sidebar header (avatar)
 // instead of a nav item, see the header buttons below.
 const helperModules = [
   {
@@ -13,7 +14,7 @@ const helperModules = [
     path: "/helper/trips",
     description: "Routes and deliveries",
   },
-  // Profile module – added to provide direct navigation to the helper's profile page.
+  // Profile module Ã¢â‚¬â€œ added to provide direct navigation to the helper's profile page.
   {
     label: "Profile",
     path: "/helper/profile",
@@ -64,6 +65,7 @@ function HelperLayout({ background, children }) {
   const navigate = useNavigate();
   const { initials: userInitials, profilePicture, role } = useUserProfile();
   const deactivationWarning = useDeactivationGuard();
+  useSingleSessionGuard();
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   const closeMobileMenuAfterDelay = (path) => {
@@ -202,7 +204,7 @@ function HelperLayout({ background, children }) {
         aria-label="Mobile navigation"
         onClick={(event) => event.stopPropagation()}
       >
-        {/* Header — the profile shortcut, since Profile isn't a nav item below. */}
+        {/* Header Ã¢â‚¬â€ the profile shortcut, since Profile isn't a nav item below. */}
         <button
           type="button"
           aria-label="Go to profile"
@@ -247,7 +249,7 @@ function HelperLayout({ background, children }) {
           aria-label="Main navigation"
           onClick={() => setIsExpanded((currentValue) => !currentValue)}
         >
-          {/* Header — the profile shortcut, since Profile isn't a nav item below. */}
+          {/* Header Ã¢â‚¬â€ the profile shortcut, since Profile isn't a nav item below. */}
           <button
             type="button"
             aria-label="Go to profile"

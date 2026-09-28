@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
+import { useState, useEffect, useRef } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import SupLayout from "../layout/SupLayout.jsx";
 import { DatePicker } from "../components/DateTimePicker.jsx";
 // import AddTruckModal from "../components/AddTruckModal.jsx"; // Disabled for supervisor view
@@ -26,6 +27,7 @@ import {
   getLastMaintenanceDate,
   getLatestMaintenance,
   getPreviousMileageFromRecords,
+  maintenanceStartMileageUpdate,
 } from "../components/trucks/utils/maintenance.js";
 import { supabase } from "../lib/supabaseClient.js"; // Enabled for supervisor view to fetch real data
 import ViewModal from "../components/ViewModal.jsx";
@@ -353,6 +355,7 @@ function PaginationBar({ page, setPage, totalPages }) {
 
 function SupTruckProfile() {
   const location = useLocation();
+  const navigate = useNavigate();
   const initialTruck = location.state?.truck;
   // Local mutable copy of the truck data that can be refreshed after updates.
   const [truck, setTruck] = useState(initialTruck);
@@ -437,23 +440,57 @@ function SupTruckProfile() {
   }
   // Devices list for mapping assigned device IDs to trucks (similar to AdminTrucks)
   // const [devices, setDevices] = useState([]); // Disabled for supervisor view
-  // Fetch the latest truck data after an edit. Uses plate_number as identifier.
-  // Fetch truck data function disabled for supervisor view (read‑only)
-  // const fetchTruck = async () => {
-  //   if (!truck?.plate_number) return;
-  //   const { data, error } = await supabase
-  //     .from("trucks")
-  //     .select("*")
-  //     .eq("plate_number", truck.plate_number)
-  //     .single();
-  //   if (error) {
-  //     setToast({ message: error.message, type: "error" });
-  //   } else if (data) {
-  //     // Simple approach: reload the page to reflect updated data.
-  //     // In a more refined implementation we could store truck data in state.
-  //     window.location.reload();
-  //   }
-  // };
+
+  // Fetch the latest truck row. The navigation state (location.state.truck) is
+  // only a snapshot taken when the Trucks list was rendered -- current_mileage
+  // keeps changing in the DB as sessions close, so the profile re-reads it
+  // instead of trusting that snapshot.
+  const fetchTruck = async () => {
+    if (!truck?.plate_number) return;
+    const { data, error } = await supabase
+      .from("trucks")
+      .select("*")
+      .eq("plate_number", truck.plate_number)
+      .single();
+    if (error) {
+      setToast({ message: error.message, type: "error" });
+    } else if (data) {
+      setTruck(data);
+    }
+  };
+
+  // Refresh once on mount so the Current Mileage card shows the real DB value.
+  useEffect(() => {
+    // Deferred so the fetch's setState doesn't run synchronously in the
+    // effect body (same pattern as the maintenance-records effect below).
+    Promise.resolve().then(() => fetchTruck());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the card live while the profile is open: driver-trip/gps-upload add
+  // the session's distance to trucks.current_mileage when a session closes, so
+  // subscribe to this truck's row rather than requiring a reload to see it.
+  useEffect(() => {
+    if (!truck?.id) return;
+    const channel = supabase
+      .channel(`truck-profile-${truck.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trucks",
+          filter: `id=eq.${truck.id}`,
+        },
+        (payload) => {
+          setTruck((prev) => (prev ? { ...prev, ...payload.new } : prev));
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [truck?.id]);
   // Auto‑clear toast after a short period (3 seconds)
   useEffect(() => {
     if (toast) {
@@ -478,8 +515,20 @@ function SupTruckProfile() {
   //   loadDevices();
   // }, []);
 
-  // Open the View modal for a specific trip
+  // Open the delivery details for a trip on the Deliveries page.
+  // SupDeliveries.jsx auto-opens location.state.openDeliveryId (routing by
+  // status: cancelled -> cancelled report, completed/delivered -> completed
+  // report, anything else -> transit monitor), so the Supervisor lands
+  // directly on the details. The ViewModal below is kept only as the
+  // fallback for rows without a delivery id (real trips always have one --
+  // they are delivery_requests rows).
   const openViewModal = (trip) => {
+    if (trip?.id) {
+      navigate("/supervisor/deliveries", {
+        state: { openDeliveryId: trip.id },
+      });
+      return;
+    }
     setSelectedTrip(trip);
     setViewModalOpen(true);
   };
@@ -497,6 +546,13 @@ function SupTruckProfile() {
     setIsSubmitting(true);
 
     try {
+      // Mileage is archived from the truck's Current Mileage, never from the
+      // form field (that field is a read-only auto-fill of this same value).
+      const archivedMileage = Number(truck.current_mileage) || 0;
+      // A log saved as "In Progress" means the maintenance is starting now --
+      // that is the one event allowed to reset Current Mileage.
+      const startsNow = logStatus === "In Progress";
+
       // Step A: Insert new log into public.maintenance_records
       // Insert new maintenance record and retrieve the inserted row for optimistic UI update
       const { data: insertedData, error: insertError } = await supabase
@@ -505,8 +561,8 @@ function SupTruckProfile() {
           truck_id: truck.id,
           start_date: logDate,
           ...(logEndDate ? { end_date: logEndDate } : {}),
-          current_mileage: Number(logMileage),
-          mileage_at_service: Number(logMileage),
+          current_mileage: archivedMileage,
+          mileage_at_service: archivedMileage,
           type: logType,
           shop: logShop,
           notes: logNotes,
@@ -526,21 +582,30 @@ function SupTruckProfile() {
       // status back to "Available" when the Supervisor left the checkbox
       // checked for a Completed log -- only when the truck is currently
       // "Maintenance", never overriding some other status (e.g. Inactive).
-      const newCurrentMileage = Math.max(
-        truck.current_mileage || 0,
-        Number(logMileage),
-      );
       const shouldMarkAvailable =
         logStatus === "Completed" &&
         logMarkAvailable &&
         truck.status === "Maintenance";
+      // An "In Progress" log means the truck is now under active
+      // maintenance: the parent row must follow it into "Maintenance",
+      // otherwise the fleet keeps dispatching it as Available/Active while
+      // it is being serviced (and the Available-guarded auto-complete
+      // effect below would instantly re-complete the record just created).
+      // "Inactive" is never touched -- a truck deactivated for
+      // non-maintenance reasons must not be resurrected by a log entry.
+      const shouldMarkMaintenance = startsNow && truck.status !== "Inactive";
       const { error: updateError } = await supabase
         .from("trucks")
         .update({
-          previous_maintenance_date: logDate,
-          previous_mileage: Number(logMileage),
-          current_mileage: newCurrentMileage,
+          // Maintenance starting now: archive Current Mileage as Previous
+          // Mileage, then reset Current Mileage to 0 (shared rule, identical
+          // in the Admin view). Any other log just records its date -- it must
+          // not touch the mileage counters.
+          ...(startsNow
+            ? maintenanceStartMileageUpdate(archivedMileage, logDate)
+            : { previous_maintenance_date: logDate }),
           ...(shouldMarkAvailable ? { status: "Available" } : {}),
+          ...(shouldMarkMaintenance ? { status: "Maintenance" } : {}),
         })
         .eq("id", truck.id);
 
@@ -552,13 +617,13 @@ function SupTruckProfile() {
         return;
       }
 
-      // Step C: Refresh State
-      // Optimistically add the new record to the UI, then re-fetch to ensure consistency
-      if (insertedData && insertedData.length) {
-        setMaintenanceRecords((prev) => [insertedData[0], ...prev]);
-      }
-      // Re-fetch maintenance records to ensure the list is fully up‑to‑date
-      await loadMaintenanceRecords();
+      // Step C: Refresh State -- truck FIRST, then records. Step B may have
+      // just moved the truck into "Maintenance" (or back to "Available");
+      // local state must reflect that before the refreshed record list
+      // (which now contains the new row) lands -- otherwise the
+      // Available-guarded auto-complete effect below observes a mixed state
+      // (old status + new "In Progress" row) and instantly re-completes the
+      // log that was just saved.
       // Refresh the truck data to reflect updated baseline fields (previous_maintenance_date, mileage, etc.)
       const { data: refreshedTruck, error: truckFetchError } = await supabase
         .from("trucks")
@@ -568,6 +633,12 @@ function SupTruckProfile() {
       if (!truckFetchError && refreshedTruck) {
         setTruck(refreshedTruck);
       }
+      // Optimistically add the new record to the UI, then re-fetch to ensure consistency
+      if (insertedData && insertedData.length) {
+        setMaintenanceRecords((prev) => [insertedData[0], ...prev]);
+      }
+      // Re-fetch maintenance records to ensure the list is fully up‑to‑date
+      await loadMaintenanceRecords();
       // Reset fields and close the modal after successful submission
       setLogDate(new Date().toISOString().split("T")[0]);
       setLogEndDate("");
@@ -582,7 +653,9 @@ function SupTruckProfile() {
       setToast({
         message: shouldMarkAvailable
           ? "Maintenance service logged successfully — truck marked Available"
-          : "Maintenance service logged successfully",
+          : shouldMarkMaintenance
+            ? "Maintenance service logged successfully — truck marked under Maintenance"
+            : "Maintenance service logged successfully",
         type: "success",
       });
     } finally {
@@ -611,19 +684,12 @@ function SupTruckProfile() {
         setTrips([]);
       } else {
         // console.log("delivery_requests rows count", (data || []).length);
+        // No fallback fetch here: a truck with no assigned deliveries must
+        // show an empty list ("No trips match this filter"), never the
+        // unfiltered table -- a debugging fallback used to replace empty
+        // results with ALL deliveries, making every delivery-less truck
+        // display the identical full list.
         let rows = data || [];
-        // If filtered query returned no rows, attempt an unrestricted fetch for debugging.
-        if (rows.length === 0) {
-          const { data: allData, error: allError } = await supabase
-            .from("delivery_requests")
-            .select("*");
-          // console.log(
-          //   "unfiltered delivery_requests rows count",
-          //   (allData || []).length,
-          //   allError,
-          // );
-          if (!allError && allData) rows = allData;
-        }
         // Exclude delivery request statuses that should not appear in the truck view.
         const EXCLUDED_RAW_STATUSES = [
           "PENDING_REQUEST",
@@ -737,7 +803,8 @@ function SupTruckProfile() {
       }
     }
     loadTrips();
-  }, [truck]);
+    // Keyed on the plate only, so realtime mileage updates don't refetch trips.
+  }, [truck?.plate_number]);
   // Maintenance records are now empty by default as we've removed the mock generator
   // and the task focuses on the 5 health cards.
   const [maintenanceRecords, setMaintenanceRecords] = useState([]);
@@ -765,55 +832,36 @@ function SupTruckProfile() {
   useEffect(() => {
     // loadMaintenanceRecords deliberately omitted -- a plain function
     // redefined every render, not memoized; including it would refire this
-    // effect every render instead of only when `truck` changes.
+    // effect every render instead of only when the truck changes. Keyed on
+    // truck.id (not the whole truck object) so a realtime mileage update
+    // arriving on the profile doesn't refetch the record list every tick.
     loadMaintenanceRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [truck]);
+  }, [truck?.id]);
 
-  // Reset mileage to 0 after a maintenance record is marked Completed
-  useEffect(() => {
-    if (!truck) return;
-    const latest = getLatestMaintenance(maintenanceRecords);
-    if (
-      latest?.status === "Completed" &&
-      truck.current_mileage &&
-      truck.current_mileage !== 0
-    ) {
-      supabase
-        .from("trucks")
-        .update({ current_mileage: 0 })
-        .eq("id", truck.id)
-        .then(({ error }) => {
-          if (error) {
-            setToast({
-              message: "Error resetting mileage: " + error.message,
-              type: "error",
-            });
-          } else {
-            // Refresh truck data
-            supabase
-              .from("trucks")
-              .select("*")
-              .eq("id", truck.id)
-              .single()
-              .then(({ data, error: fetchError }) => {
-                if (!fetchError && data) setTruck(data);
-              });
-          }
-        });
-    }
-    // truck deliberately omitted -- this effect's own body calls setTruck
-    // (via the refetch above), so including truck would refire this effect
-    // on its own update, risking a loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maintenanceRecords]);
+  // NOTE: the old "reset mileage to 0 when the latest maintenance is
+  // Completed" effect was removed here. It re-ran every time the profile was
+  // opened (the latest record is almost always Completed), wiping all
+  // distance the truck had driven since that maintenance. The reset now only
+  // happens at the moment a maintenance starts -- see
+  // maintenanceStartMileageUpdate in components/trucks/utils/maintenance.js.
 
   // Auto‑complete any "In Progress" maintenance record when the truck's status
-  // transitions to "Available". This mirrors the admin view behavior and ensures
-  // the Maintenance tab shows a Completed status, also triggering mileage reset.
+  // transitions to "Available". This mirrors the admin view behavior and
+  // ensures the Maintenance tab shows a Completed status.
+  // Transition-guarded: fires ONLY when the status actually changed INTO
+  // "Available" since the previous run -- never merely because the record
+  // list refreshed while the truck was already Available. Without this,
+  // logging a fresh "In Progress" record completed itself on the
+  // post-submit refresh (and overwrote its end_date with today), because
+  // the truck was still sitting at "Available" when the new row landed.
+  const prevTruckStatusRef = useRef(truck?.status);
   useEffect(() => {
     if (!truck) return;
+    const prevStatus = prevTruckStatusRef.current;
+    prevTruckStatusRef.current = truck.status;
     if (truck.status !== "Available") return;
+    if (prevStatus === "Available") return;
     const inProgress = maintenanceRecords.find(
       (r) => r.status === "In Progress",
     );
@@ -1010,7 +1058,8 @@ function SupTruckProfile() {
               </div>
             </>
           )}
-          {/* View modal for delivery request details */}
+            {/* Fallback View modal for delivery request details -- only opens
+            when a row has no delivery id to navigate to (see openViewModal) */}
           <ViewModal
             isOpen={isViewModalOpen}
             onClose={closeViewModal}
@@ -1067,7 +1116,7 @@ function SupTruckProfile() {
             <div>
               <InfoRow label="Plate Number" value={truck.plate_number} />
               <InfoRow label="Model" value={truck.model} />
-              <InfoRow label="Truck Type" value={truck.truck_type} />
+               <InfoRow label="Truck Type" value={normalizeTruckTypeName(truck.truck_type)} />
               <InfoRow
                 label="Commodity Type"
                 value={
@@ -1295,10 +1344,15 @@ function SupTruckProfile() {
                         type="number"
                         name="mileage"
                         value={logMileage}
-                        onChange={(e) => setLogMileage(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        readOnly
+                        className="w-full px-3 py-2 border rounded-md bg-slate-50 text-slate-700"
                         required
                       />
+                      <p className="mt-1 text-xs text-slate-500">
+                        Auto-filled from Current Mileage. When this maintenance
+                        starts, it becomes Previous Mileage and Current Mileage
+                        resets to 0.
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1449,8 +1503,13 @@ function SupTruckProfile() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsLogMaintenanceModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-blue-50 px-3.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 sm:text-sm"
+                    onClick={() => {
+                      // Auto-fill the read-only mileage field with the truck's
+                      // Current Mileage so the log shows what will be archived.
+                      setLogMileage(String(Number(truck?.current_mileage) || 0));
+                      setIsLogMaintenanceModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-violet-50 px-3.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 sm:text-sm"
                   >
                     <Wrench className="h-3.5 w-3.5" />
                     <span>Add Record</span>

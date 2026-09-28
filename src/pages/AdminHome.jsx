@@ -561,6 +561,7 @@ function AdminHome() {
   }
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [tempPassword, setTempPassword] = useState('')
+  const [resetUrl, setResetUrl] = useState('')
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
   const [isPasswordCopied, setIsPasswordCopied] = useState(false)
   const [isAddConfirmOpen, setIsAddConfirmOpen] = useState(false)
@@ -1006,7 +1007,7 @@ function AdminHome() {
       !province ||
       (role === 'Customer' && !clientName)
     ) {
-      setFormError('Please fill in all required fields (Middle Name is optional).')
+      setFormError('Please fill in all required fields.')
       return
     }
 
@@ -1334,10 +1335,11 @@ function AdminHome() {
       showStatusModal(
         'success',
         'Password Reset',
-        `A new temporary password was emailed to ${manageForm.email}.`
+        `A reset link was emailed to ${manageForm.email}. Their current password keeps working until they set a new one.`
       )
     } else {
       setTempPassword(data.tempPassword || '')
+      setResetUrl(data.resetUrl || '')
       setIsPasswordCopied(false)
       // Cleared, not set -- this modal/Done button is shared with
       // confirmAddUser's identical "email failed" path, and addedUserName is
@@ -1347,7 +1349,7 @@ function AdminHome() {
       showStatusModal(
         'error',
         'Password Reset — Email Not Sent',
-        `The password was reset, but the email failed to send (${data.emailError || 'unknown error'}). Share the temporary password with them securely.`,
+        `The reset link could not be emailed (${data.emailError || 'unknown error'}). Share it with them securely — their current password still works until they use it.`,
         () => setIsPasswordModalOpen(true)
       )
     }
@@ -2311,8 +2313,8 @@ function AdminHome() {
               Reset password for {selectedUser?.name}?
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              This immediately invalidates their current password and generates a new temporary
-              one, emailed to {manageForm.email || 'their personal email'}.
+              We'll email them a link to set a new password. Their current password keeps working
+              until they use it — nothing changes right away.
             </p>
 
             <div className="mt-5 flex justify-end gap-2">
@@ -2427,22 +2429,25 @@ function AdminHome() {
           aria-modal="true"
           aria-labelledby="temp-password-title"
         >
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-600">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-600">
               Email Not Sent
             </p>
             <h3 id="temp-password-title" className="mt-2 text-base font-semibold text-slate-900">
-              Share this temporary password
+              {resetUrl ? 'Share this password reset link' : 'Share this temporary password'}
             </h3>
             <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="min-w-0 flex-1 truncate font-mono text-sm text-slate-900">
-                {tempPassword}
+              <p
+                className={`min-w-0 flex-1 font-mono text-sm text-slate-900 ${
+                  resetUrl ? 'break-all text-xs' : 'truncate'
+                }`}
+              >
+                {resetUrl || tempPassword}
               </p>
               <button
                 type="button"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(tempPassword)
+                    await navigator.clipboard.writeText(resetUrl || tempPassword)
                     setIsPasswordCopied(true)
                     setTimeout(() => setIsPasswordCopied(false), 2000)
                   } catch {
@@ -2452,7 +2457,7 @@ function AdminHome() {
                   }
                 }}
                 className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-violet-300 hover:text-violet-700"
-                title="Copy password"
+                title="Copy"
               >
                 {isPasswordCopied ? (
                   <>
@@ -2468,7 +2473,9 @@ function AdminHome() {
               </button>
             </div>
             <p className="mt-3 text-sm text-slate-500">
-              This password will not be shown again. Send it to the new user securely.
+              {resetUrl
+                ? 'This link is single-use and expires shortly. Send it to the user securely — their current password keeps working until they set a new one.'
+                : 'This password will not be shown again. Send it to the new user securely.'}
             </p>
             <button
               type="button"
@@ -2476,6 +2483,7 @@ function AdminHome() {
               onClick={() => {
                 setIsPasswordModalOpen(false)
                 setTempPassword('')
+                setResetUrl('')
                 // Only the Add User flow sets addedUserName (see
                 // confirmAddUser/handleResetPassword) -- this same modal is
                 // also reached from Reset Password, which should not show an

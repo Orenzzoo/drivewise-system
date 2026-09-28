@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient.js";
+import { releaseActiveSession } from "../lib/singleSession.js";
 import { clearProfileCache } from "../lib/useUserInitials.js";
 
 function LogoutButton({
@@ -32,7 +33,14 @@ function LogoutButton({
       return;
     }
     setIsLoggingOut(true);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
     await supabase.auth.signOut();
+    if (userId) {
+      await releaseActiveSession(userId);
+    }
     clearProfileCache();
     try {
       sessionStorage.clear();

@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 import LogoutButton from "./LogoutButton.jsx";
 import { useUserProfile } from "../lib/useUserInitials.js";
 import { useDeactivationGuard } from "../lib/useDeactivationGuard.js";
+import { useSingleSessionGuard } from '../hooks/useSingleSessionGuard.js';
 import { formatCutoff } from "../lib/deactivation.js";
 import { useSidebarBadges } from "../lib/useSidebarBadges.js";
 
@@ -142,6 +143,7 @@ function SupLayout({ background, children, bg = "bg-white" }) {
   const { initials: userInitials, profilePicture, role } = useUserProfile();
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const deactivationWarning = useDeactivationGuard();
+  useSingleSessionGuard();
   const location = useLocation();
   const { pendingDeliveries, assignableDeliveries, overdueTrucks, scheduledTrucks } =
     useSidebarBadges();

@@ -1,5 +1,6 @@
 // React import removed as it is not directly used (JSX transpilation handles it)
 import { useResolvedAddress } from "../lib/reverseGeocode.js";
+import { normalizeItemTypeName } from "../lib/deliveryOptions.js";
 
 /**
  * Reusable modal that displays the details of a delivery request.
@@ -92,7 +93,9 @@ export default function ViewModal({ isOpen, onClose, trip }) {
               </tr>
               <tr className="bg-gray-50">
                 <td className="font-medium py-2 px-2">Item Type</td>
-                <td className="py-2 px-2">{renderField(trip.item_type)}</td>
+                <td className="py-2 px-2">
+                  {renderField(normalizeItemTypeName(trip.item_type))}
+                </td>
               </tr>
               <tr className="bg-white">
                 <td className="font-medium py-2 px-2">Pick‑up Location</td>

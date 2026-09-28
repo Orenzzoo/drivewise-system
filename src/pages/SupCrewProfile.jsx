@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import SupLayout from "../layout/SupLayout.jsx";
 import { supabase } from "../lib/supabaseClient.js";
+import { normalizeTruckTypeName } from "../lib/deliveryOptions.js";
 import {
   formatManilaTimestamp,
   getManilaHour,
@@ -1577,7 +1578,7 @@ function SupCrewProfile() {
                                 (entry) => entry.id === assignedTruckId,
                               );
                               return truck
-                                ? `${truck.plateNumber} · ${truck.truckType}`
+                                ? `${truck.plateNumber} · ${normalizeTruckTypeName(truck.truckType)}`
                                 : "Unknown truck";
                             })()
                           : "No truck assigned"
@@ -2153,7 +2154,7 @@ function SupCrewProfile() {
                   {!isLoadingTrucks &&
                     assignableTrucks.map((truck) => (
                       <option key={truck.id} value={truck.id}>
-                        {truck.plateNumber} · {truck.truckType}
+                        {truck.plateNumber} · {normalizeTruckTypeName(truck.truckType)}
                       </option>
                     ))}
                 </select>

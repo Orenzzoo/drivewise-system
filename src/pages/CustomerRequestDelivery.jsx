@@ -86,6 +86,7 @@ const MAX_STOPS = 20;
 // columns on submit.
 const sanitizeBudgetInput = (raw) => {
   let value = String(raw).replace(/[^\d.]/g, "");
+  if (value === ".") return "";
   const dot = value.indexOf(".");
   if (dot !== -1) {
     value = `${value.slice(0, dot + 1)}${value.slice(dot + 1).replace(/\./g, "")}`;
@@ -100,6 +101,25 @@ const formatBudgetForDisplay = (raw) => {
   const [whole, decimals] = raw.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return decimals === undefined ? grouped : `${grouped}.${decimals}`;
+};
+
+const sanitizeNumberInput = (raw) => {
+  let value = String(raw).replace(/[^0-9.]/g, "");
+  const dot = value.indexOf(".");
+  if (dot !== -1) {
+    value = `${value.slice(0, dot + 1)}${value.slice(dot + 1).replace(/\./g, "")}`;
+    const [whole, decimals] = value.split(".");
+    value = decimals === undefined ? whole : `${whole}.${decimals.slice(0, 2)}`;
+  }
+  return value;
+};
+
+const addDecimalToBudget = (raw) => {
+  if (!raw) return "";
+  const [whole, decimals] = raw.split(".");
+  if (decimals === undefined) return `${whole}.00`;
+  if (decimals.length < 2) return `${whole}.${decimals.padEnd(2, "0")}`;
+  return `${whole}.${decimals.slice(0, 2)}`;
 };
 
 // Map PostgREST error codes to friendly messages so the user sees
@@ -1332,7 +1352,9 @@ function CustomerRequestDelivery() {
     const storedValue =
       name === "budgetMin" || name === "budgetMax"
         ? sanitizeBudgetInput(value)
-        : value;
+        : name === "cargoWeight"
+          ? sanitizeNumberInput(value)
+          : value;
     const next = { ...formData, [name]: storedValue };
     // LocationInput passes lat/lng alongside the address text when the
     // value came from a search suggestion or the map picker (both already
@@ -1380,6 +1402,16 @@ function CustomerRequestDelivery() {
     }
 
     setFormData(next);
+  };
+
+  const handleBudgetBlur = (e) => {
+    const { name, value } = e.target;
+    const v = sanitizeBudgetInput(value);
+    const [whole, decimals] = v.split(".");
+    let formatted = v;
+    if (decimals === undefined) formatted = `${whole}.00`;
+    else if (decimals.length < 2) formatted = `${whole}.${decimals.padEnd(2, "0")}`;
+    setFormData(prev => ({ ...prev, [name]: formatted }));
   };
 
   // No availability gate here -- any truck stays selectable regardless of
@@ -1712,9 +1744,9 @@ function CustomerRequestDelivery() {
         })),
       truck_type: formData.truckType,
       item_type: formData.itemType,
-      cargo_weight: cargoWeightNum,
-      budget_min: formData.budgetMin.replace(/\.$/, "") || null,
-      budget_max: formData.budgetMax.replace(/\.$/, "") || null,
+      cargo_weight: parseFloat(cargoWeightNum) || null,
+      budget_min: formData.budgetMin ? parseFloat(formData.budgetMin.replace(/\.$/, "")) || 0 : null,
+      budget_max: formData.budgetMax ? parseFloat(formData.budgetMax.replace(/\.$/, "")) || 0 : null,
       notes: formData.notes || null,
       status: "PENDING_REQUEST",
       suggested_route: suggestedRoute,
@@ -2226,18 +2258,19 @@ function CustomerRequestDelivery() {
                   >
                     Estimated Cargo Weight (kg)
                   </label>
-                  <input
-                    type="number"
-                    id="cargoWeight"
-                    name="cargoWeight"
-                    min="1"
-                    step="1"
-                    value={formData.cargoWeight}
-                    onChange={handleChange}
-                    placeholder="e.g. 800"
-                    required
-                    className="w-full rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  />
+                   <input
+                     type="text"
+                     inputMode="decimal"
+                     id="cargoWeight"
+                     name="cargoWeight"
+                     min="1"
+                     step="1"
+                     value={formData.cargoWeight}
+                     onChange={handleChange}
+                     placeholder="e.g. 800"
+                     required
+                     className="w-full rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                   />
                 </div>
               </div>
             </div>
@@ -2396,7 +2429,7 @@ function CustomerRequestDelivery() {
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
                 Enter your preferred budget range (minimum ₱
-                {MIN_BUDGET_AMOUNT.toLocaleString()}). The final quotation
+                {MIN_BUDGET_AMOUNT.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}). The final quotation
                 will be discussed with the supervisor.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -2421,6 +2454,7 @@ function CustomerRequestDelivery() {
                       name="budgetMin"
                       value={formatBudgetForDisplay(formData.budgetMin)}
                       onChange={handleChange}
+                      onBlur={handleBudgetBlur}
                       placeholder="e.g. 5,000"
                       className={`w-full rounded-xl border bg-white pl-8 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                         budgetError
@@ -2451,6 +2485,7 @@ function CustomerRequestDelivery() {
                       name="budgetMax"
                       value={formatBudgetForDisplay(formData.budgetMax)}
                       onChange={handleChange}
+                      onBlur={handleBudgetBlur}
                       placeholder="e.g. 10,000"
                       className={`w-full rounded-xl border bg-white pl-8 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
                         budgetError

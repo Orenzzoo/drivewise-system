@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import LogoutButton from "./LogoutButton.jsx";
 import { useUserProfile } from "../lib/useUserInitials.js";
 import { useDeactivationGuard } from "../lib/useDeactivationGuard.js";
+import { useSingleSessionGuard } from '../hooks/useSingleSessionGuard.js';
 import { formatCutoff } from "../lib/deactivation.js";
 
 const clientModules = [
@@ -61,6 +62,7 @@ function CustomerLayout({ background, children, bg = "bg-white" }) {
   const { initials: userInitials, profilePicture, role } = useUserProfile();
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const deactivationWarning = useDeactivationGuard();
+  useSingleSessionGuard();
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   const closeMobileMenuAfterDelay = (path) => {

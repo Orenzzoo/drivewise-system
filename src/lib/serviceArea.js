@@ -7,72 +7,52 @@
 // search suggestion, submit-time geocode) validates against these polygons,
 // so a coordinate outside Luzon can never be selected or saved.
 
-const LUZON_MAINLAND = [
-  // Northwest tip (Pagudpud) east along the north coast to Santa Ana
-  [18.57, 120.63], [18.52, 120.95], [18.47, 121.2], [18.42, 121.55],
-  [18.47, 121.85], [18.51, 122.0], [18.48, 122.15],
-  // East coast south through Cagayan, Isabela, Aurora
-  [18.3, 122.1], [17.9, 122.08], [17.6, 122.25], [17.3, 122.4],
-  [17.03, 122.43], [16.88, 122.38], [16.5, 122.32], [16.28, 122.12],
-  [16.08, 122.15], [15.85, 121.8], [15.75, 121.58], [15.62, 121.48],
-  [15.53, 121.4],
-  // Down to Infanta/Real, then the Quezon coast and Bondoc Peninsula
-  [14.95, 121.55], [14.74, 121.65], [14.6, 121.55], [14.4, 121.68],
-  [14.19, 121.73], [14.27, 121.93], [14.05, 122.02], [13.92, 122.1],
-  [13.78, 122.22], [13.55, 122.38], [13.37, 122.52], [13.31, 122.55],
-  [13.45, 122.35], [13.7, 122.12], [13.88, 121.98], [13.96, 121.79],
-  [13.93, 121.64], [13.9, 121.42], [13.79, 121.15], [13.74, 121.06], [13.72, 120.92],
-  // Batangas, Calatagan, Cavite, around Manila Bay, Bataan
-  [13.67, 120.87], [13.73, 120.61], [14.11, 120.63], [14.42, 120.59],
-  [14.47, 120.9], [14.6, 120.97], [14.8, 120.92], [14.86, 120.64],
-  [14.72, 120.46], [14.55, 120.4], [14.44, 120.49],
-  // Zambales coast north, Bolinao, around Lingayen Gulf, Ilocos coast back north
-  [14.66, 120.26], [14.81, 120.27], [14.98, 120.06], [15.32, 119.98],
-  [15.55, 119.94], [15.78, 119.84], [15.95, 119.83], [16.15, 119.9],
-  [16.32, 119.77], [16.1, 120.05], [16.02, 120.21], [16.14, 120.4],
-  [16.62, 120.31], [17.0, 120.38], [17.57, 120.39], [18.05, 120.45],
-  [18.25, 120.55]
-]
+// Luzon mainland envelope (includes the Bicol peninsula) plus the outlying
+// service islands (Mindoro, Marinduque, Catanduanes, Polillo). Each ring is
+// the convex hull of the traced Natural Earth coastline pushed a uniform
+// 0.05 deg (~5.5 km) out into the ocean: the hull contains every coastal
+// vertex of its island by construction, and the ocean pad makes piers,
+// coastal barangays and nearshore clicks validate while distant open sea,
+// the Visayas and Palawan stay outside. A deliberately loose envelope that
+// favors easy location selection over tracing the exact shoreline.
 
-// Bicol peninsula (Camarines Norte/Sur, Albay, Sorsogon). Modeled as a second
-// mainland ring overlapping the first near the Quezon border — overlap is
-// harmless since a point is valid when it falls inside ANY service-area ring.
-const BICOL_PENINSULA = [
-  // Lamon Bay south shore (Quezon border area)
-  [13.99, 122.29], [13.91, 122.44], [13.97, 122.57], [13.9, 122.65],
-  // Down the Ragay Gulf east shore
-  [13.78, 122.86], [13.69, 122.92], [13.55, 122.98], [13.42, 123.1],
-  [13.3, 123.23],
-  [13.18, 123.42], [12.93, 123.53], [12.97, 123.65], [12.66, 123.87],
-  [12.5, 124.07],
-  // Sorsogon east coast north through Albay
-  [12.76, 124.14], [13.03, 124.16], [13.14, 123.74], [13.36, 123.73],
-  [13.47, 123.63], [13.7, 123.4],
-  // Caramoan peninsula, San Miguel Bay, Camarines Norte coast
-  [13.77, 123.72], [13.82, 123.27], [13.79, 122.89], [14.14, 123.02],
-  [14.13, 122.49], [14.27, 122.05]
+const LUZON_MAINLAND = [
+  [15.975, 119.7133], [15.9061, 119.7215], [15.4158, 119.84], [14.7843, 120.0336],
+  [13.7806, 120.5877], [13.7326, 120.6355], [13.5805, 121.0299], [12.5019, 123.9673],
+  [12.4914, 124.061], [12.5357, 124.1285], [12.6837, 124.1727], [13.0266, 124.2301],
+  [13.0669, 124.2193], [13.7556, 124.0164], [18.4118, 122.3468], [18.5563, 122.2701],
+  [18.6927, 121.11], [18.696, 120.826], [18.6846, 120.7933], [18.5738, 120.594],
+  [18.5357, 120.5293], [16.36, 119.7458], [16.2267, 119.7196], [15.975, 119.7133]
 ]
 
 const MINDORO = [
-  [13.54, 120.94], [13.41, 121.22], [13.05, 121.5], [12.95, 121.48],
-  [12.58, 121.5], [12.29, 121.28], [12.35, 121.09], [12.6, 120.89],
-  [12.91, 120.79], [13.23, 120.59], [13.41, 120.76]
+  [13.4437, 120.2603], [13.38, 120.2844], [12.3937, 120.9453], [12.2068, 121.0844],
+  [12.1669, 121.2549], [12.2616, 121.4295], [12.3414, 121.4881], [12.6352, 121.5964],
+  [13.0873, 121.5954], [13.1531, 121.5939], [13.4843, 121.2236], [13.5704, 121.0002],
+  [13.5761, 120.9798], [13.5803, 120.9541], [13.5763, 120.3682], [13.5414, 120.2981],
+  [13.4437, 120.2603]
 ]
 
 const MARINDUQUE = [
-  [13.47, 121.87], [13.49, 122.03], [13.32, 122.12], [13.22, 121.98], [13.28, 121.85]
+  [13.3252, 121.7661], [13.2452, 121.8324], [13.1421, 122.0189], [13.2182, 122.0893],
+  [13.3097, 122.1445], [13.3765, 122.1716], [13.4626, 122.1722], [13.5076, 122.1424],
+  [13.5986, 122.0172], [13.6204, 121.863], [13.5921, 121.8139], [13.4718, 121.7753],
+  [13.3252, 121.7661]
 ]
 
 const CATANDUANES = [
-  [14.1, 124.24], [14.04, 124.46], [13.78, 124.48], [13.56, 124.36],
-  [13.47, 124.19], [13.62, 124.13], [13.92, 124.14]
+  [13.6681, 123.9739], [13.5725, 124.0059], [13.4929, 124.1401], [13.4786, 124.2014],
+  [13.5294, 124.3629], [13.6489, 124.4579], [13.8919, 124.4689], [14.1201, 124.2538],
+  [14.145, 124.2087], [14.1209, 124.0966], [13.6681, 123.9739]
 ]
 
 const POLILLO = [
-  [14.93, 121.88], [14.97, 122.1], [14.82, 122.16], [14.7, 122.0], [14.76, 121.84]
+  [15.0212, 121.7774], [14.9405, 121.7822], [14.594, 121.8804], [14.6045, 121.9613],
+  [14.6404, 122.035], [14.7212, 122.0657], [15.0039, 122.099], [15.0886, 122.0082],
+  [15.0918, 121.9369], [15.0826, 121.8244], [15.0212, 121.7774]
 ]
 
-export const LUZON_SERVICE_AREA = [LUZON_MAINLAND, BICOL_PENINSULA, MINDORO, MARINDUQUE, CATANDUANES, POLILLO]
+export const LUZON_SERVICE_AREA = [LUZON_MAINLAND, MINDORO, MARINDUQUE, CATANDUANES, POLILLO]
 
 export const SERVICE_AREA_MESSAGE =
   'This location is outside our service area. Please select a location within Luzon.'
@@ -88,10 +68,12 @@ export const SERVICE_AREA_MAX_BOUNDS = [
 ]
 
 // Ray-casting point-in-polygon: true if (lat, lng) is inside any ring.
-// Rings are stored as [lat, lng]. Points within COASTLINE_TOLERANCE degrees
-// (~200m) of any ring also count as inside, so a snapped pin or a click
-// landing exactly on a modeled coastline vertex is never rejected.
-const COASTLINE_TOLERANCE = 0.002
+// Rings are stored as [lat, lng]. Points within COASTLINE_TOLERANCE
+// degrees of any ring edge also count as inside, a safety net so a snapped
+// pin or a click landing on the envelope boundary is never rejected. The
+// envelope already reaches ~0.05 deg into the ocean, so this only fires
+// right at the outer pad edge.
+const COASTLINE_TOLERANCE = 0.015
 
 export function isInsideLuzon(lat, lng) {
   if (LUZON_SERVICE_AREA.some(ring => pointInRing(lat, lng, ring))) return true

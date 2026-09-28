@@ -93,6 +93,31 @@ const LEGACY_ITEM_TYPE_LABELS = {
   construction: "Construction Materials",
 };
 
+// Convert underscored values like "1T_DRY", "pantry_staples" to
+// proper display names like "1T Dry", "Pantry Staples".
+// Uses the existing label fields as the source of truth; falls
+// back to converting underscores to spaces and capitalizing.
+export function normalizeTruckTypeName(value) {
+  if (!value) return "";
+  const normalized = String(value).replace(/_/g, " ");
+  const match = truckTypes.find(
+    (t) => t.value === value || t.value === normalized,
+  );
+  if (match) return match.label;
+  // Legacy "L300" maps to "LUV"
+  if (normalized === "L300") return "LUV";
+  return normalized.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function normalizeItemTypeName(value) {
+  if (!value) return "";
+  const match = itemTypes.find((item) => item.value === value);
+  if (match) return match.label;
+  return String(value)
+    .replace(/[_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function getItemTypeLabel(value) {
   return (
     itemTypes.find((item) => item.value === value)?.label ||
@@ -247,10 +272,10 @@ export const MIN_BUDGET_AMOUNT = 500;
 
 export function getBudgetError({ budgetMin, budgetMax }) {
   if (budgetMin !== "" && Number(budgetMin) < MIN_BUDGET_AMOUNT) {
-    return `Minimum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString()}.`;
+    return `Minimum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
   }
   if (budgetMax !== "" && Number(budgetMax) < MIN_BUDGET_AMOUNT) {
-    return `Maximum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString()}.`;
+    return `Maximum budget must be at least ₱${MIN_BUDGET_AMOUNT.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
   }
   if (budgetMin === "" || budgetMax === "") return "";
   return Number(budgetMax) < Number(budgetMin)
