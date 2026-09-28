@@ -619,7 +619,6 @@ function ActiveDeliveries({ data, isLoading, now, focusedTruckId, onFocusTruck }
                     </td>
                     <td className="py-1.5 pr-2">
                       <Badge tone={DEVICE_STATE_TONE[row.deviceState]}>{row.deviceState}</Badge>
-                      <p className="mt-0.5 text-[10px] text-slate-400">Heartbeat: {formatAgo(row.lastHeartbeat, now)}</p>
                     </td>
                     <td className="py-1.5">
                       {row.position && (
