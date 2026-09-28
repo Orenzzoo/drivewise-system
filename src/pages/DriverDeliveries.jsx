@@ -5434,8 +5434,9 @@ function DriverDeliveries() {
                     {isPausedTrip ? (
                       <div className="flex items-center gap-1.5 rounded-xl bg-amber-800 px-3.5 py-2.5 text-[11px] font-medium text-white sm:text-xs">
                         <Pause className="h-3.5 w-3.5 shrink-0" />
-                        Trip paused — GPS and drowsiness monitoring are stopped.
-                        Resume when you're ready to continue driving.
+                        Trip paused — drowsiness monitoring is stopped. GPS
+                        tracking continues. Resume when you're ready to
+                        continue driving.
                       </div>
                     ) : (
                       statusCfg.banner && (
