@@ -219,8 +219,8 @@ const ALERT_TYPE_ICONS = {
 // rolling 30-minute window use the normal chime; the moment a 5th alert
 // lands within that same 30-minute window, it and every alert after it
 // (until the window clears) use the more urgent clip instead.
-const USUAL_ALERT_SRC = encodeURI("/Usual Alert.mp3");
-const MULTIPLE_ALERT_SRC = encodeURI("/5+ Multiple Alert.mp3");
+const USUAL_ALERT_SRC = "/usual-alert.mp3";
+const MULTIPLE_ALERT_SRC = "/multiple-alert.mp3";
 const ALERT_CLUSTER_WINDOW_MS = 30 * 60 * 1000;
 const ALERT_CLUSTER_THRESHOLD = 5;
 
@@ -238,8 +238,9 @@ function unlockAlertAudio(audioEl) {
       audioEl.currentTime = 0;
       audioEl.muted = wasMuted;
     })
-    .catch(() => {
+    .catch((err) => {
       audioEl.muted = wasMuted;
+      console.warn("Drowsiness alert audio unlock failed:", err);
     });
 }
 
@@ -4433,7 +4434,20 @@ function DriverDeliveries() {
   // pressed in, but a page reload mid-trip (or opening the trip in a new tab
   // while it's already Active) mounts fresh <audio> elements that were never
   // unlocked, and the browser then silently blocks the first real alert.
-  // Unlocking on the very next tap/click while monitoring closes that gap.
+  // Unlocking on tap/click while monitoring closes that gap.
+  //
+  // Deliberately NOT self-removing after the first tap (previous behavior) --
+  // found 2026-09-28 via a real deployed drive test: a driver isn't
+  // constantly tapping the screen while actually driving, so a background/
+  // screen-lock cycle mid-trip (which mobile Chrome uses to discard a
+  // backgrounded tab's decoded media buffers and revoke the element's
+  // gesture-unlock) could easily outlast the single one-shot listener,
+  // silently blocking every alert for the rest of the trip
+  // ("NotSupportedError: no supported sources", zero network request --
+  // Chrome refusing to even fetch a gesture-gated element's source). Staying
+  // armed for the whole monitoring session means any later tap (Pause,
+  // opening the map, dismissing a toast, etc.) re-primes fresh/reset
+  // elements, not just the very first one after mount.
   useEffect(() => {
     if (!isMonitoring) return undefined;
     const unlock = () => {
@@ -4445,7 +4459,6 @@ function DriverDeliveries() {
       if (typeof window.speechSynthesis !== "undefined") {
         window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
       }
-      document.removeEventListener("pointerdown", unlock);
     };
     document.addEventListener("pointerdown", unlock);
     return () => document.removeEventListener("pointerdown", unlock);
