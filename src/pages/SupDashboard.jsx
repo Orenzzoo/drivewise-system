@@ -217,18 +217,6 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatAgo(isoString, now) {
-  if (!isoString) return "Never";
-  const diffMs = now - new Date(isoString).getTime();
-  if (diffMs < 0) return "Just now";
-  const s = Math.floor(diffMs / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  return `${h}h ago`;
-}
-
 // Resolves a delivery's Device state (Online/Offline/Waiting for
 // Device/Monitoring Unavailable) and Trip state (Active/Paused) per
 // 08_REALTIME_DASHBOARD.md's "Monitoring Status"/"Important Rules" sections.
@@ -735,7 +723,6 @@ function useFleetOps() {
           milestone: d.status,
           tripState: state.tripState,
           deviceState: state.deviceState,
-          lastHeartbeat: device?.last_ping || null,
           // Phone GPS preferred when a broadcast has arrived recently,
           // falling back to the Pi's gps_logs-sourced position otherwise --
           // display only. movementMeters/isAnomalous below stay gps_logs-only
@@ -849,7 +836,7 @@ function useFleetOps() {
 }
 
 // ----- Active deliveries (live ops) -----
-function ActiveDeliveries({ data, isLoading, now, focusedTruckId, onFocusTruck }) {
+function ActiveDeliveries({ data, isLoading, focusedTruckId, onFocusTruck }) {
   return (
     <Panel title="Active Deliveries" action={<ViewAllLink to="/supervisor/deliveries?tab=transit" />}>
       {isLoading ? (
@@ -2039,7 +2026,6 @@ function SupDashboard() {
             <ActiveDeliveries
               data={fleetOps}
               isLoading={isLoading}
-              now={now}
               focusedTruckId={focusedTruckId}
               onFocusTruck={handleFocusTruck}
             />

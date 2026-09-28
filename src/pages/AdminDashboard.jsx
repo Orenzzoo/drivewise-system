@@ -190,18 +190,6 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatAgo(isoString, now) {
-  if (!isoString) return "Never";
-  const diffMs = now - new Date(isoString).getTime();
-  if (diffMs < 0) return "Just now";
-  const s = Math.floor(diffMs / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  return `${h}h ago`;
-}
-
 function resolveOpsState({ openSession, closedSessions, device, now }) {
   const hasEverHadSession = openSession || closedSessions.length > 0;
   if (!hasEverHadSession) return null;
@@ -498,7 +486,6 @@ function useFleetOps() {
           milestone: d.status,
           tripState: state.tripState,
           deviceState: state.deviceState,
-          lastHeartbeat: device?.last_ping || null,
           // Phone GPS preferred when a broadcast has arrived recently,
           // falling back to the Pi's gps_logs-sourced position otherwise --
           // display only, mirrors SupDashboard.jsx. movementMeters/
@@ -579,7 +566,7 @@ function useFleetOps() {
 
 // ----- Active deliveries (live ops). No ViewAllLink action -- there's no
 // /admin/deliveries page to send it to. -----
-function ActiveDeliveries({ data, isLoading, now, focusedTruckId, onFocusTruck }) {
+function ActiveDeliveries({ data, isLoading, focusedTruckId, onFocusTruck }) {
   return (
     <Panel title="Active Deliveries">
       {isLoading ? (
@@ -1396,7 +1383,7 @@ function WeeklySafetySummary({ data, dateRange, onDateRangeChange }) {
 
 function AdminDashboard() {
   const [dateRange, setDateRange] = useState("7 Days");
-  const { fleetOps, alertFeed, realDriverSafety, isLoading, now, trucks } = useFleetOps();
+  const { fleetOps, alertFeed, realDriverSafety, isLoading, trucks } = useFleetOps();
   const [focusedTruckId, setFocusedTruckId] = useState(null);
   const [focusToken, setFocusToken] = useState(0);
   const handleFocusTruck = (id) => {
@@ -1482,7 +1469,6 @@ function AdminDashboard() {
             <ActiveDeliveries
               data={fleetOps}
               isLoading={isLoading}
-              now={now}
               focusedTruckId={focusedTruckId}
               onFocusTruck={handleFocusTruck}
             />
