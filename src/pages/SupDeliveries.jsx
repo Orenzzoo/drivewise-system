@@ -9057,7 +9057,7 @@ function SupDeliveries() {
                   <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-white">
                     <div className="shrink-0 border-b border-slate-200 px-4 py-3">
                       <h3 className="text-base font-semibold text-slate-900">
-                        Real-time Monitoring
+                        Monitoring
                       </h3>
                       <p className="text-xs text-slate-500">
                         {monitoredDelivery
